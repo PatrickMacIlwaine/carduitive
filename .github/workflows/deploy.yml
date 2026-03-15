@@ -1,0 +1,103 @@
+name: Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: carduitive3-cluster
+  GKE_ZONE: us-central1
+  IMAGE_BACKEND: carduitive3-backend
+  IMAGE_FRONTEND: carduitive3-frontend
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run backend linter
+        working-directory: backend
+        run: pip install ruff && ruff check .
+
+      - name: Run frontend build
+        working-directory: frontend
+        run: npm run build
+
+  build-and-push:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up GCloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker
+
+      - name: Build and push backend image
+        run: |
+          docker build -t gcr.io/$PROJECT_ID/$IMAGE_BACKEND:${{ github.sha }} ./backend
+          docker push gcr.io/$PROJECT_ID/$IMAGE_BACKEND:${{ github.sha }}
+
+      - name: Build and push frontend image
+        run: |
+          docker build -t gcr.io/$PROJECT_ID/$IMAGE_FRONTEND:${{ github.sha }} ./frontend
+          docker push gcr.io/$PROJECT_ID/$IMAGE_FRONTEND:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up GCloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+
+      - name: Deploy to GKE
+        run: |
+          sed -i 's|gcr.io/PROJECT_ID/carduitive3-backend:latest|gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_BACKEND }}:${{ github.sha }}|g' k8s/backend-deployment.yaml
+          sed -i 's|gcr.io/PROJECT_ID/carduitive3-frontend:latest|gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_FRONTEND }}:${{ github.sha }}|g' k8s/frontend-deployment.yaml
+          
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/backend -n carduitive3
+          kubectl rollout status deployment/frontend -n carduitive3
