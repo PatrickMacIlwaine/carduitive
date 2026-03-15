@@ -2,11 +2,47 @@ from fastapi import APIRouter, HTTPException, Cookie, Response, Request
 from pydantic import BaseModel
 from typing import Optional, List
 import json
+from jose import jwt
 
 from app.lobby_manager import lobby_manager
 from app.websocket import lobby_manager_ws
+from app.config import get_settings
 
+settings = get_settings()
 router = APIRouter(prefix="/api/lobbies", tags=["lobbies"])
+
+
+def get_current_user_from_token(request: Request) -> dict | None:
+    """Extract user info from auth token if present."""
+    token = request.cookies.get("auth_token")
+    if not token:
+        return None
+    
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        return {
+            "user_id": payload["user_id"],
+            "google_id": payload["google_id"],
+            "email": payload["email"],
+            "name": payload["name"]
+        }
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.JWTError:
+        return None
+
+
+def build_you_dict(player) -> dict:
+    """Build the 'you' dict with player info including auth details."""
+    return {
+        "id": player.id,
+        "name": player.name,
+        "is_host": player.is_host,
+        "session_id": player.session_id,
+        "avatar_url": player.avatar_url,
+        "is_authenticated": player.is_authenticated,
+        "user_id": player.user_id,
+    }
 
 
 class CreateLobbyRequest(BaseModel):
@@ -43,18 +79,29 @@ class LobbyResponse(BaseModel):
 @router.post("", response_model=LobbyResponse)
 async def create_lobby(
     request: CreateLobbyRequest,
-    response: Response
+    response: Response,
+    http_request: Request
 ):
     """Create a new lobby."""
     # Check if lobby already exists
     if lobby_manager.lobby_exists(request.code):
         raise HTTPException(status_code=400, detail="Lobby already exists")
     
+    # Check for authenticated user
+    auth_user = get_current_user_from_token(http_request)
+    
     # Create lobby
     lobby = lobby_manager.create_lobby(request.code)
     
-    # Add first player (host)
-    player = lobby_manager.join_lobby(request.code, request.player_name)
+    # Add first player (host) - use Google name if authenticated, otherwise use provided name
+    player_name = auth_user["name"] if auth_user else request.player_name
+    player = lobby_manager.join_lobby(
+        request.code,
+        player_name,
+        user_id=auth_user["user_id"] if auth_user else None,
+        avatar_url=auth_user.get("avatar_url") if auth_user else None,
+        is_authenticated=auth_user is not None
+    )
     
     # Set session cookie
     response.set_cookie(
@@ -66,12 +113,7 @@ async def create_lobby(
     )
     
     lobby_dict = lobby.to_dict()
-    lobby_dict["you"] = {
-        "id": player.id,
-        "name": player.name,
-        "is_host": player.is_host,
-        "session_id": player.session_id,
-    }
+    lobby_dict["you"] = build_you_dict(player)
     
     return lobby_dict
 
@@ -96,12 +138,7 @@ async def get_lobby(
     if lobby_session:
         player = lobby.get_player_by_session(lobby_session)
         if player:
-            lobby_dict["you"] = {
-                "id": player.id,
-                "name": player.name,
-                "is_host": player.is_host,
-                "session_id": player.session_id,
-            }
+            lobby_dict["you"] = build_you_dict(player)
     
     return lobby_dict
 
@@ -131,12 +168,7 @@ async def join_lobby(
         if player:
             # Player exists with this session - allow re-join
             lobby_dict = lobby.to_dict()
-            lobby_dict["you"] = {
-                "id": player.id,
-                "name": player.name,
-                "is_host": player.is_host,
-                "session_id": player.session_id,
-            }
+            lobby_dict["you"] = build_you_dict(player)
             # Include recent messages
             recent_messages = lobby.get_messages(50)
             lobby_dict["messages"] = [
@@ -156,8 +188,24 @@ async def join_lobby(
     if lobby_manager.is_name_taken(code, request.player_name):
         raise HTTPException(status_code=409, detail=f"Name '{request.player_name}' is already taken")
     
-    # Add player
-    player = lobby_manager.join_lobby(code, request.player_name)
+    # Check for authenticated user
+    auth_user = get_current_user_from_token(http_request)
+    
+    # Use Google name if authenticated and no name provided, otherwise use provided name
+    player_name = request.player_name
+    if auth_user and not player_name:
+        player_name = auth_user["name"]
+    elif not player_name:
+        raise HTTPException(status_code=400, detail="Player name is required")
+    
+    # Add player with auth info if available
+    player = lobby_manager.join_lobby(
+        code,
+        player_name,
+        user_id=auth_user["user_id"] if auth_user else None,
+        avatar_url=auth_user.get("avatar_url") if auth_user else None,
+        is_authenticated=auth_user is not None
+    )
     if not player:
         raise HTTPException(status_code=400, detail="Failed to join lobby")
     
@@ -186,12 +234,7 @@ async def join_lobby(
     )
     
     lobby_dict = lobby.to_dict()
-    lobby_dict["you"] = {
-        "id": player.id,
-        "name": player.name,
-        "is_host": player.is_host,
-        "session_id": player.session_id,
-    }
+    lobby_dict["you"] = build_you_dict(player)
     # Include recent messages for the joining player
     recent_messages = lobby.get_messages(50)
     lobby_dict["messages"] = [

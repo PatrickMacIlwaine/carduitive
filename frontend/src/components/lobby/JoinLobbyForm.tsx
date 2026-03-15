@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowRight, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { GoogleLoginButton, UserInfo } from '@/components/auth/GoogleAuth'
+import type { User as UserType } from '@/types/lobby'
 
 interface JoinLobbyFormProps {
   lobbyCode: string
@@ -12,6 +14,8 @@ interface JoinLobbyFormProps {
   onCreate: (playerName: string) => Promise<boolean>
   loading?: boolean
   error?: string | null
+  user?: UserType | null
+  onLogout?: () => Promise<void>
 }
 
 export function JoinLobbyForm({ 
@@ -20,10 +24,19 @@ export function JoinLobbyForm({
   onJoin, 
   onCreate, 
   loading,
-  error 
+  error,
+  user,
+  onLogout
 }: JoinLobbyFormProps) {
   const [playerName, setPlayerName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Pre-fill name if user is authenticated
+  useEffect(() => {
+    if (user && !playerName) {
+      setPlayerName(user.name)
+    }
+  }, [user])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,6 +78,21 @@ export function JoinLobbyForm({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+          
+          {/* Show authenticated user info or login button */}
+          {user ? (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <UserInfo 
+                user={user} 
+                onLogout={onLogout || (async () => {})} 
+              />
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <GoogleLoginButton redirect={`/lobby/${lobbyCode}`} />
+            </div>
+          )}
+          
           <Input
             placeholder="Your name"
             value={playerName}
