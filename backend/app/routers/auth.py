@@ -26,7 +26,7 @@ oauth.register(
 )
 
 
-def create_token(user_id: int, google_id: str, email: str, name: str) -> str:
+def create_token(user_id: int, google_id: str, email: str, name: str, avatar_url: str | None) -> str:
     """Create a JWT token for the user."""
     expires = datetime.utcnow() + timedelta(days=7)
     token = jwt.encode(
@@ -35,6 +35,7 @@ def create_token(user_id: int, google_id: str, email: str, name: str) -> str:
             "google_id": google_id,
             "email": email,
             "name": name,
+            "avatar_url": avatar_url,
             "exp": expires
         },
         settings.secret_key,
@@ -120,7 +121,7 @@ async def google_callback(request: Request, response: Response):
                 )
     
     # Create JWT token
-    auth_token = create_token(user.id, user.google_id, user.email, user.name)
+    auth_token = create_token(user.id, user.google_id, user.email, user.name, user.avatar_url)
     print(f"DEBUG: Created token for user: {user.name}")
     
     # Build redirect URL
@@ -161,11 +162,22 @@ async def get_current_user(request: Request):
     
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        
+        # If avatar_url is missing from token (old token), fetch from database
+        avatar_url = payload.get("avatar_url")
+        if not avatar_url:
+            async with async_session() as db:
+                user_service = UserService(db)
+                user = await user_service.get_user_by_google_id(payload["google_id"])
+                if user:
+                    avatar_url = user.avatar_url
+        
         return {
             "user_id": payload["user_id"],
             "google_id": payload["google_id"],
             "email": payload["email"],
-            "name": payload["name"]
+            "name": payload["name"],
+            "avatar_url": avatar_url
         }
     except jwt.ExpiredSignatureError:
         return None

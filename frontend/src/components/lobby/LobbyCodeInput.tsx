@@ -4,10 +4,12 @@ import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export function LobbyCodeInput() {
   const [lobbyCode, setLobbyCode] = useState('')
   const [error, setError] = useState('')
+  const [isChecking, setIsChecking] = useState(false)
   const navigate = useNavigate()
 
   const validateCode = (code: string): boolean => {
@@ -23,7 +25,7 @@ export function LobbyCodeInput() {
     setError('')
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!lobbyCode) {
@@ -36,8 +38,30 @@ export function LobbyCodeInput() {
       return
     }
 
-    // Navigate to lobby
-    navigate(`/lobby/${lobbyCode}`)
+    // Check if lobby exists before navigating
+    setIsChecking(true)
+    try {
+      const res = await fetch(`/api/lobbies/${lobbyCode}`, {
+        credentials: 'include'
+      })
+      
+      if (res.status === 404) {
+        setError('Lobby not found')
+        return
+      }
+
+      if (!res.ok) {
+        setError('Unable to check lobby. Please try again.')
+        return
+      }
+
+      // Lobby exists, navigate to it
+      navigate(`/lobby/${lobbyCode}`)
+    } catch (err) {
+      setError('Network error. Please try again.')
+    } finally {
+      setIsChecking(false)
+    }
   }
 
   return (
@@ -60,18 +84,27 @@ export function LobbyCodeInput() {
               maxLength={5}
               autoComplete="off"
               autoFocus
+              disabled={isChecking}
             />
             {error && (
-              <p className="text-sm text-destructive text-center">{error}</p>
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
           </div>
           <Button 
             type="submit" 
             className="w-full h-12 text-lg"
-            disabled={lobbyCode.length !== 5}
+            disabled={lobbyCode.length !== 5 || isChecking}
           >
-            Join Lobby
-            <ArrowRight className="ml-2 w-5 h-5" />
+            {isChecking ? (
+              <span>Checking...</span>
+            ) : (
+              <>
+                Join Lobby
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </>
+            )}
           </Button>
         </form>
       </CardContent>

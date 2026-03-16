@@ -1,18 +1,24 @@
 import { Button } from '@/components/ui/button'
 import { User } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 
 interface GoogleLoginButtonProps {
   redirect?: string
 }
 
-export function GoogleLoginButton({ redirect = '/' }: GoogleLoginButtonProps) {
+export function GoogleLoginButton({ redirect }: GoogleLoginButtonProps) {
+  const location = useLocation()
+  
   const handleLogin = () => {
-    const loginUrl = `/api/auth/google/login?redirect=${encodeURIComponent(redirect)}`
+    // Use current path as redirect if not specified
+    const redirectPath = redirect || location.pathname + location.search
+    const loginUrl = `/api/auth/google/login?redirect=${encodeURIComponent(redirectPath)}`
     window.location.href = loginUrl
   }
 
   return (
     <Button
+      type="button"
       onClick={handleLogin}
       variant="outline"
       className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-900 border border-gray-300"

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { GoogleLoginButton, UserInfo } from '@/components/auth/GoogleAuth'
+import { GoogleLoginButton } from '@/components/auth/GoogleAuth'
 import type { User as UserType } from '@/types/lobby'
 
 interface JoinLobbyFormProps {
@@ -15,7 +15,6 @@ interface JoinLobbyFormProps {
   loading?: boolean
   error?: string | null
   user?: UserType | null
-  onLogout?: () => Promise<void>
 }
 
 export function JoinLobbyForm({ 
@@ -25,8 +24,7 @@ export function JoinLobbyForm({
   onCreate, 
   loading,
   error,
-  user,
-  onLogout
+  user
 }: JoinLobbyFormProps) {
   const [playerName, setPlayerName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -79,17 +77,10 @@ export function JoinLobbyForm({
             </Alert>
           )}
           
-          {/* Show authenticated user info or login button */}
-          {user ? (
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <UserInfo 
-                user={user} 
-                onLogout={onLogout || (async () => {})} 
-              />
-            </div>
-          ) : (
+          {/* Only show login button if not authenticated */}
+          {!user && (
             <div className="flex justify-center">
-              <GoogleLoginButton redirect={`/lobby/${lobbyCode}`} />
+              <GoogleLoginButton />
             </div>
           )}
           
