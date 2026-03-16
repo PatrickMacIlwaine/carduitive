@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Wifi, WifiOff, Crown, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLobby } from '@/hooks/lobby/useLobby'
+import { useAuth } from '@/hooks/useAuth'
 import { PlayerList } from '@/components/lobby/PlayerList'
 import { LobbyChat } from '@/components/lobby/LobbyChat'
 import { JoinLobbyForm } from '@/components/lobby/JoinLobbyForm'
@@ -90,6 +91,8 @@ export function LobbyPage() {
   const { lobbyCode } = useParams<{ lobbyCode: string }>()
   const code = lobbyCode?.toUpperCase() || ''
   
+  const { user, logout } = useAuth()
+  
   const {
     lobby,
     loading,
@@ -122,6 +125,8 @@ export function LobbyPage() {
           onCreate={createLobby}
           loading={loading}
           error={error}
+          user={user}
+          onLogout={logout}
         />
       </div>
     )

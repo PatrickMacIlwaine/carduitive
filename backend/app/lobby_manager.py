@@ -21,6 +21,10 @@ class Player:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     joined_at: datetime = field(default_factory=datetime.now)
+    # Google auth fields (optional)
+    user_id: int | None = None
+    avatar_url: str | None = None
+    is_authenticated: bool = False
 
 
 @dataclass
@@ -40,8 +44,21 @@ class Lobby:
     def host(self) -> Optional[Player]:
         return next((p for p in self.players if p.is_host), None)
     
-    def add_player(self, name: str, is_host: bool = False) -> Player:
-        player = Player(name=name, is_host=is_host)
+    def add_player(
+        self,
+        name: str,
+        is_host: bool = False,
+        user_id: int | None = None,
+        avatar_url: str | None = None,
+        is_authenticated: bool = False
+    ) -> Player:
+        player = Player(
+            name=name,
+            is_host=is_host,
+            user_id=user_id,
+            avatar_url=avatar_url,
+            is_authenticated=is_authenticated
+        )
         self.players.append(player)
         self.updated_at = datetime.now()
         return player
@@ -90,6 +107,8 @@ class Lobby:
                     "name": p.name,
                     "is_host": p.is_host,
                     "joined_at": p.joined_at.isoformat(),
+                    "avatar_url": p.avatar_url,
+                    "is_authenticated": p.is_authenticated,
                 }
                 for p in self.players
             ]
@@ -148,7 +167,14 @@ class LobbyManager:
             return None
         return lobby.get_player_by_session(session_id)
     
-    def join_lobby(self, code: str, player_name: str) -> Optional[Player]:
+    def join_lobby(
+        self,
+        code: str,
+        player_name: str,
+        user_id: int | None = None,
+        avatar_url: str | None = None,
+        is_authenticated: bool = False
+    ) -> Optional[Player]:
         """Add a player to an existing lobby."""
         lobby = self._lobbies.get(code)
         if not lobby:
@@ -156,7 +182,13 @@ class LobbyManager:
         
         # First player becomes host
         is_host = len(lobby.players) == 0
-        player = lobby.add_player(player_name, is_host)
+        player = lobby.add_player(
+            player_name,
+            is_host=is_host,
+            user_id=user_id,
+            avatar_url=avatar_url,
+            is_authenticated=is_authenticated
+        )
         return player
     
     def leave_lobby(self, code: str, player_id: str) -> bool:
