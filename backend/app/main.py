@@ -1,10 +1,12 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
 import json
+import os
 
 from app.database import engine, Base
-from app.routers import counter, leaderboard, lobbies
+from app.routers import counter, leaderboard, lobbies, auth
 from app.websocket import lobby_manager_ws
 from app.lobby_manager import lobby_manager
 
@@ -25,6 +27,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Session middleware for OAuth
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production"),
+    max_age=3600 * 24 * 7,  # 7 days
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,6 +45,7 @@ app.add_middleware(
 app.include_router(counter.router)
 app.include_router(leaderboard.router)
 app.include_router(lobbies.router)
+app.include_router(auth.router)
 
 
 @app.websocket("/ws/lobby/{lobby_code}")

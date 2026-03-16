@@ -3,6 +3,8 @@ export interface Player {
   name: string
   is_host: boolean
   joined_at: string
+  avatar_url?: string
+  is_authenticated?: boolean
 }
 
 export interface CurrentPlayer {
@@ -10,6 +12,9 @@ export interface CurrentPlayer {
   name: string
   is_host: boolean
   session_id: string
+  avatar_url?: string
+  is_authenticated?: boolean
+  user_id?: number
 }
 
 export interface Lobby {
@@ -38,4 +43,13 @@ export interface WebSocketMessage {
   message?: string
   player_id?: string
   timestamp?: string
+}
+
+// Auth types
+export interface User {
+  user_id: number
+  google_id: string
+  email: string
+  name: string
+  avatar_url?: string
 }
