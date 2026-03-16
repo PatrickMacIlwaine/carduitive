@@ -91,7 +91,7 @@ export function LobbyPage() {
   const { lobbyCode } = useParams<{ lobbyCode: string }>()
   const code = lobbyCode?.toUpperCase() || ''
   
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   
   const {
     lobby,
@@ -126,7 +126,6 @@ export function LobbyPage() {
           loading={loading}
           error={error}
           user={user}
-          onLogout={logout}
         />
       </div>
     )

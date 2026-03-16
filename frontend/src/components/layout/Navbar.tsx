@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Sun, Moon, Trophy, Home, Sparkles, User, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/useTheme'
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 
 export function Navbar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { resolvedTheme, toggleTheme } = useTheme()
   const { user, isLoading, logout, isAuthenticated } = useAuth()
 
@@ -17,6 +18,11 @@ export function Navbar() {
 
   const handleLogin = () => {
     window.location.href = '/api/auth/google/login?redirect=/home'
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/home')
   }
 
   return (
@@ -60,26 +66,36 @@ export function Navbar() {
             <div className="ml-4 flex items-center gap-2">
               {!isLoading && (
                 isAuthenticated && user ? (
-                  <div className="flex items-center gap-2">
-                    {user.avatar_url ? (
-                      <img
-                        src={user.avatar_url}
-                        alt={user.name}
-                        className="w-8 h-8 rounded-full"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                        <User className="w-4 h-4 text-gray-500" />
-                      </div>
-                    )}
-                    <span className="hidden sm:inline text-sm font-medium">{user.name}</span>
+                  <div className="flex items-center gap-3 group">
+                    {/* Avatar and user info */}
+                    <div className="flex items-center gap-2 cursor-default" title={user.avatar_url || 'No avatar'}>
+                      {user.avatar_url ? (
+                        <img
+                          src={user.avatar_url}
+                          alt={user.name}
+                          className="w-8 h-8 rounded-full border-2 border-primary/20 object-cover"
+                          onError={(e) => {
+                            console.error('Failed to load avatar:', user.avatar_url)
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center border-2 border-primary/20">
+                          <User className="w-4 h-4 text-gray-500" />
+                        </div>
+                      )}
+                      <span className="hidden sm:inline text-sm font-medium">{user.name}</span>
+                    </div>
+                    
+                    {/* Logout button */}
                     <Button
                       variant="ghost"
-                      size="icon"
-                      onClick={logout}
-                      className="ml-1"
+                      size="sm"
+                      onClick={handleLogout}
+                      className="text-muted-foreground hover:text-red-500 transition-colors"
                     >
                       <LogOut className="w-4 h-4" />
+                      <span className="hidden sm:inline ml-1">Logout</span>
                     </Button>
                   </div>
                 ) : (
