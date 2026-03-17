@@ -222,6 +222,18 @@ class LobbyManager:
         if not lobby:
             return False
         
+        # If game is in progress, don't remove player - just mark them as disconnected
+        # This preserves their game state (cards) for when they rejoin
+        if lobby.status == "playing" and lobby.game:
+            # Mark player as disconnected in the game
+            if hasattr(lobby.game, 'handle_player_disconnect'):
+                lobby.game.handle_player_disconnect(player_id)
+            # Player stays in lobby.players but is marked as disconnected
+            # The WebSocket manager will handle tracking actual connection status
+            self._notify_player_left(lobby, player_id)
+            return True
+        
+        # Game not in progress - actually remove the player
         removed = lobby.remove_player(player_id)
         
         # Delete lobby if empty
@@ -233,6 +245,13 @@ class LobbyManager:
                 lobby.players[0].is_host = True
         
         return removed
+    
+    def _notify_player_left(self, lobby: Lobby, player_id: str):
+        """Notify that a player left (for game in progress case)."""
+        player = next((p for p in lobby.players if p.id == player_id), None)
+        if player:
+            lobby.add_message("System", "system", f"{player.name} left the lobby", "system")
+        lobby.updated_at = datetime.now()
     
     def start_game(self, code: str, game_type: str, config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -303,6 +322,26 @@ class LobbyManager:
             return lobby.game.get_player_state(player_id)
         else:
             return lobby.game.get_public_state()
+    
+    def handle_player_disconnect(self, code: str, player_id: str):
+        """Notify game that a player has disconnected (WebSocket closed)."""
+        lobby = self._lobbies.get(code)
+        if not lobby or not lobby.game:
+            return
+        
+        # Call game's disconnect handler
+        if hasattr(lobby.game, 'handle_player_disconnect'):
+            lobby.game.handle_player_disconnect(player_id)
+    
+    def handle_player_reconnect(self, code: str, player_id: str):
+        """Notify game that a player has reconnected."""
+        lobby = self._lobbies.get(code)
+        if not lobby or not lobby.game:
+            return
+        
+        # Call game's reconnect handler
+        if hasattr(lobby.game, 'handle_player_reconnect'):
+            lobby.game.handle_player_reconnect(player_id)
     
     def list_lobbies(self) -> List[Lobby]:
         """List all active lobbies."""
