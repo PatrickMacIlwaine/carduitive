@@ -42,3 +42,25 @@ postgres_data/
 # Temporary files
 /tmp/
 *.tmp
+
+# Kubernetes secrets - never commit these
+*-secret.yaml
+secrets.yaml
+secrets-*.yaml
+*.secret.yaml
+
+# GCP service account keys
+*-sa-key.json
+*service-account*.json
+gcp-*.json
+
+# Environment files with secrets
+.env
+.env.*
+.env.local
+.env.production
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
