@@ -4,7 +4,7 @@ import os
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/carduitive3"
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/carduitive"
 )
 
 engine = create_async_engine(DATABASE_URL, echo=True)

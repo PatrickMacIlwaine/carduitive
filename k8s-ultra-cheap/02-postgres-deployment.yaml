@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
-  namespace: carduitive3
+  namespace: carduitive
   labels:
     app: postgres
 spec:
@@ -32,7 +32,7 @@ spec:
                   name: postgres-secret
                   key: password
             - name: POSTGRES_DB
-              value: carduitive3
+              value: carduitive
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           resources:
