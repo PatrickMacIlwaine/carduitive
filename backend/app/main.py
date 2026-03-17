@@ -19,8 +19,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="carduitive3 API",
-    description="Backend API for carduitive3",
+    title="carduitive API",
+    description="Backend API for carduitive",
     version="0.0.1",
     docs_url="/docs",
     redoc_url="/redoc",

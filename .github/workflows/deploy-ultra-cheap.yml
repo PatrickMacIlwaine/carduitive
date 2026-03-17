@@ -7,12 +7,12 @@ on:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GKE_CLUSTER: carduitive3-cluster
+  GKE_CLUSTER: carduitive-cluster
   GKE_ZONE: us-east1-b
   REGION: us-east1
-  REPOSITORY: carduitive3
-  IMAGE_BACKEND: carduitive3-backend
-  IMAGE_FRONTEND: carduitive3-frontend
+  REPOSITORY: carduitive
+  IMAGE_BACKEND: carduitive-backend
+  IMAGE_FRONTEND: carduitive-frontend
 
 jobs:
   lint-and-test:
@@ -101,13 +101,13 @@ jobs:
       - name: Deploy to GKE
         run: |
           # Update image tags in ultra-cheap manifests
-          sed -i 's|us-east1-docker.pkg.dev/PROJECT_ID/carduitive3/carduitive3-backend:latest|us-east1-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_BACKEND }}:${{ github.sha }}|g' k8s-ultra-cheap/04-backend-deployment.yaml
-          sed -i 's|us-east1-docker.pkg.dev/PROJECT_ID/carduitive3/carduitive3-frontend:latest|us-east1-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_FRONTEND }}:${{ github.sha }}|g' k8s-ultra-cheap/06-frontend-deployment.yaml
+          sed -i 's|us-east1-docker.pkg.dev/PROJECT_ID/carduitive/carduitive-backend:latest|us-east1-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_BACKEND }}:${{ github.sha }}|g' k8s-ultra-cheap/04-backend-deployment.yaml
+          sed -i 's|us-east1-docker.pkg.dev/PROJECT_ID/carduitive/carduitive-frontend:latest|us-east1-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_FRONTEND }}:${{ github.sha }}|g' k8s-ultra-cheap/06-frontend-deployment.yaml
           
           # Apply all manifests
           kubectl apply -f k8s-ultra-cheap/
           
           # Wait for deployments to be ready
-          kubectl rollout status deployment/postgres -n carduitive3 --timeout=120s
-          kubectl rollout status deployment/backend -n carduitive3 --timeout=120s
-          kubectl rollout status deployment/frontend -n carduitive3 --timeout=120s
+          kubectl rollout status deployment/postgres -n carduitive --timeout=120s
+          kubectl rollout status deployment/backend -n carduitive --timeout=120s
+          kubectl rollout status deployment/frontend -n carduitive --timeout=120s
