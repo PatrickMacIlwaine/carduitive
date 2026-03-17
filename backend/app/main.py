@@ -57,8 +57,31 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
         await websocket.close(code=4000, reason="Lobby not found")
         return
     
-    # Connect to lobby room
-    await lobby_manager_ws.connect(websocket, lobby_code)
+    # Get session from cookies to identify player
+    cookies = websocket.cookies
+    session_cookie_name = f"lobby_{lobby_code}"
+    session_id = cookies.get(session_cookie_name)
+    
+    print(f"DEBUG WebSocket cookies: {dict(cookies)}")
+    print(f"DEBUG Looking for cookie: {session_cookie_name}")
+    print(f"DEBUG Session ID: {session_id}")
+    
+    # Find player by session
+    player_id = None
+    player_name = "Unknown"
+    if session_id:
+        player = lobby.get_player_by_session(session_id)
+        if player:
+            player_id = player.id
+            player_name = player.name
+            print(f"DEBUG Found player: {player_name} ({player_id})")
+        else:
+            print(f"DEBUG No player found for session: {session_id}")
+    else:
+        print(f"DEBUG No session cookie found")
+    
+    # Connect to lobby room with player tracking
+    await lobby_manager_ws.connect(websocket, lobby_code, player_id)
     
     try:
         # Send initial lobby state with chat history
@@ -67,6 +90,7 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
             json.dumps({
                 "type": "connected",
                 "lobby_code": lobby_code,
+                "player_id": player_id,
                 "message": f"Connected to lobby {lobby_code}",
                 "data": {
                     "messages": [
@@ -79,7 +103,8 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
                             "type": msg.type
                         }
                         for msg in recent_messages
-                    ]
+                    ],
+                    "connected_players": lobby_manager_ws.get_connected_players(lobby_code)
                 }
             }),
             websocket
@@ -100,12 +125,12 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
                 
                 # Handle chat messages
                 if msg_type == "chat" or "message" in message:
-                    player_name = message.get("player_name", "Unknown")
-                    player_id = message.get("player_id", "unknown")
+                    sender_name = message.get("player_name", player_name)
+                    sender_id = message.get("player_id", player_id or "unknown")
                     msg_text = message.get("message", "")
                     
                     # Store message in lobby
-                    stored_msg = lobby.add_message(player_name, player_id, msg_text, "chat")
+                    stored_msg = lobby.add_message(sender_name, sender_id, msg_text, "chat")
                     
                     # Broadcast to all connected clients
                     await lobby_manager_ws.broadcast_to_lobby(

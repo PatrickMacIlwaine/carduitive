@@ -7,10 +7,16 @@ interface UseLobbyReturn {
   error: string | null
   wsConnected: boolean
   messages: ChatMessage[]
+  countdown: number | null
+  isStarting: boolean
   joinLobby: (playerName: string) => Promise<boolean>
   createLobby: (playerName: string) => Promise<boolean>
   leaveLobby: () => void
   sendChatMessage: (message: string) => void
+  startGame: () => Promise<boolean>
+  playCard: (card: number) => Promise<boolean>
+  advanceLevel: () => Promise<boolean>
+  restartLevel: () => Promise<boolean>
 }
 
 export function useLobby(lobbyCode: string): UseLobbyReturn {
@@ -19,6 +25,8 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   const [error, setError] = useState<string | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
   
   const wsRef = useRef<WebSocket | null>(null)
   const playerRef = useRef<{ id: string; name: string } | null>(null)
@@ -61,7 +69,11 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
       return
     }
 
-    const wsUrl = `ws://${window.location.host}/ws/lobby/${lobbyCode}`
+    // Connect directly to backend WebSocket, not through Vite dev server
+    const backendHost = window.location.hostname + ':8000'
+    const wsUrl = `ws://${backendHost}/ws/lobby/${lobbyCode}`
+    
+    console.log('Connecting to WebSocket:', wsUrl)
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
@@ -116,6 +128,68 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
             }
             break
             
+          case 'game_update':
+            // Update game state from other players' moves
+            if (message.data) {
+              setLobby(prev => {
+                if (!prev) return prev
+                return {
+                  ...prev,
+                  game_state: {
+                    ...message.data as Lobby['game_state'],
+                    my_hand: prev.game_state?.my_hand  // Preserve my private hand
+                  }
+                }
+              })
+            }
+            break
+            
+          case 'level_started':
+            // New level started (advance or restart)
+            console.log('Level started:', message.data)
+            if (message.data && 'level' in message.data) {
+              const levelData = message.data as { level: number; status: string; action: string }
+              // Update lobby with new level info
+              setLobby(prev => {
+                if (!prev) return prev
+                return {
+                  ...prev,
+                  status: 'playing',
+                  current_level: levelData.level,
+                  game_state: {
+                    ...prev.game_state,
+                    level: levelData.level,
+                    status: levelData.status
+                  }
+                }
+              })
+              
+              // Fetch new game state with new cards for this level
+              // Use setTimeout to ensure backend has processed the level transition
+              setTimeout(() => {
+                console.log('Fetching new game state for level', levelData.level)
+                fetchLobby()
+              }, 100)
+            }
+            break
+            
+          case 'connection_update':
+            // Update connection status for players
+            if (message.connected_players) {
+              setLobby(prev => {
+                if (!prev) return prev
+                const connectedSet = new Set(message.connected_players)
+                return {
+                  ...prev,
+                  players: prev.players.map(player => ({
+                    ...player,
+                    is_connected: connectedSet.has(player.id)
+                  }))
+                }
+              })
+            }
+            break
+            
           case 'chat':
             if (message.data && 'player_id' in message.data) {
               const chatData = message.data as ChatMessage
@@ -135,6 +209,57 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
             if (message.data && 'messages' in message.data && Array.isArray(message.data.messages)) {
               setMessages(message.data.messages as ChatMessage[])
             }
+            // Load initial connected players
+            if (message.data && 'connected_players' in message.data && Array.isArray(message.data.connected_players)) {
+              const connectedSet = new Set(message.data.connected_players as string[])
+              setLobby(prev => {
+                if (!prev) return prev
+                return {
+                  ...prev,
+                  players: prev.players.map(player => ({
+                    ...player,
+                    is_connected: connectedSet.has(player.id)
+                  }))
+                }
+              })
+            }
+            break
+            
+          case 'countdown':
+            if (message.data && 'count' in message.data) {
+              const count = message.data.count as number
+              console.log('Countdown:', count)
+              setCountdown(count)
+              setIsStarting(true)
+              
+              // Clear countdown after it reaches 0
+              if (count === 0) {
+                setTimeout(() => {
+                  setCountdown(null)
+                  setIsStarting(false)
+                }, 1500)
+              }
+            }
+            break
+            
+          case 'game_started':
+            console.log('Game started:', message.data)
+            const gameData = message.data as any
+            if (gameData && gameData.game_state) {
+              setLobby(prev => {
+                if (!prev) return prev
+                return {
+                  ...prev,
+                  status: 'playing',
+                  game_state: gameData.game_state
+                }
+              })
+            }
+            setCountdown(null)
+            setIsStarting(false)
+            
+            // Fetch full game state with private hand info
+            fetchLobby()
             break
             
           case 'error':
@@ -286,6 +411,147 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     }))
   }, [])
 
+  // Start game (host only)
+  const startGame = useCallback(async (): Promise<boolean> => {
+    try {
+      setIsStarting(true)
+      
+      const res = await fetch(`/api/lobbies/${lobbyCode}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          game_type: 'classic',
+          config: { deck_size: 100, timing_mode: 'relaxed' }
+        })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        setError(errorData.detail || 'Failed to start game')
+        setIsStarting(false)
+        return false
+      }
+
+      const data = await res.json()
+      console.log('Game start response:', data)
+      
+      // Countdown will be handled via WebSocket messages
+      return true
+    } catch (err) {
+      console.error('Error starting game:', err)
+      setError('Failed to start game')
+      setIsStarting(false)
+      return false
+    }
+  }, [lobbyCode])
+
+  // Play a card
+  const playCard = useCallback(async (card: number): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/lobbies/${lobbyCode}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'play', data: { card } })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        console.error('Error playing card:', errorData)
+        return false
+      }
+
+      const data = await res.json()
+      console.log('Play card result:', data)
+      
+      // Update lobby with new game state
+      setLobby(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          game_state: data
+        }
+      })
+      
+      return true
+    } catch (err) {
+      console.error('Error playing card:', err)
+      return false
+    }
+  }, [lobbyCode])
+
+  // Advance to next level
+  const advanceLevel = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/lobbies/${lobbyCode}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'advance', data: {} })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        console.error('Error advancing level:', errorData)
+        return false
+      }
+
+      const data = await res.json()
+      console.log('Advance result:', data)
+      
+      // Update lobby with new game state
+      setLobby(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          game_state: data,
+          current_level: data.level
+        }
+      })
+      
+      return true
+    } catch (err) {
+      console.error('Error advancing level:', err)
+      return false
+    }
+  }, [lobbyCode])
+
+  // Restart current level
+  const restartLevel = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/lobbies/${lobbyCode}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'restart', data: {} })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        console.error('Error restarting level:', errorData)
+        return false
+      }
+
+      const data = await res.json()
+      console.log('Restart result:', data)
+      
+      // Update lobby with new game state
+      setLobby(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          game_state: data
+        }
+      })
+      
+      return true
+    } catch (err) {
+      console.error('Error restarting level:', err)
+      return false
+    }
+  }, [lobbyCode])
+
   // Initial lobby check
   useEffect(() => {
     let mounted = true
@@ -317,9 +583,15 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     error,
     wsConnected,
     messages,
+    countdown,
+    isStarting,
     joinLobby,
     createLobby,
     leaveLobby,
-    sendChatMessage
+    sendChatMessage,
+    startGame,
+    playCard,
+    advanceLevel,
+    restartLevel
   }
 }
