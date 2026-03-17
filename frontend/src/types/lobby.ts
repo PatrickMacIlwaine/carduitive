@@ -5,6 +5,8 @@ export interface Player {
   joined_at: string
   avatar_url?: string
   is_authenticated?: boolean
+  is_connected?: boolean  // WebSocket connection status
+  is_ready?: boolean      // Ready to start game
 }
 
 export interface CurrentPlayer {
@@ -19,10 +21,12 @@ export interface CurrentPlayer {
 
 export interface Lobby {
   code: string
-  status: 'waiting' | 'playing' | 'ended'
+  status: 'waiting' | 'starting' | 'playing' | 'ended'
   player_count: number
   players: Player[]
   you?: CurrentPlayer
+  current_level?: number
+  game_state?: any  // Game state when playing
   created_at?: string
   updated_at?: string
 }
@@ -37,12 +41,13 @@ export interface ChatMessage {
 }
 
 export interface WebSocketMessage {
-  type: 'player_joined' | 'player_left' | 'lobby_update' | 'chat' | 'connected' | 'error'
-  data?: Lobby | ChatMessage | { messages: ChatMessage[] }
+  type: 'player_joined' | 'player_left' | 'lobby_update' | 'chat' | 'connected' | 'connection_update' | 'countdown' | 'game_started' | 'game_update' | 'level_started' | 'error'
+  data?: Lobby | ChatMessage | { messages: ChatMessage[]; connected_players?: string[]; count?: number; game_state?: any; game_type?: string; level?: number; status?: string; action?: string }
   player_name?: string
   message?: string
   player_id?: string
   timestamp?: string
+  connected_players?: string[]
 }
 
 // Auth types
