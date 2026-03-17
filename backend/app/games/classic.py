@@ -52,92 +52,17 @@ class ClassicCarduitive(Game):
         
         # Disconnected player tracking
         self.disconnected_players: Set[str] = set()
-        self.disconnect_times: Dict[str, datetime] = {}
-        self.AUTO_PLAY_DELAY_SECONDS = 30  # Auto-play after 30 seconds disconnected
         
     def handle_player_disconnect(self, player_id: str):
-        """Mark player as disconnected and track disconnect time"""
+        """Mark player as disconnected"""
         self.disconnected_players.add(player_id)
-        self.disconnect_times[player_id] = datetime.now()
         self.log_action("disconnect", player_id, {"timestamp": datetime.now().isoformat()})
         
     def handle_player_reconnect(self, player_id: str):
         """Mark player as reconnected"""
         if player_id in self.disconnected_players:
             self.disconnected_players.discard(player_id)
-            if player_id in self.disconnect_times:
-                del self.disconnect_times[player_id]
             self.log_action("reconnect", player_id, {"timestamp": datetime.now().isoformat()})
-    
-    def _should_auto_play_for_disconnected(self) -> bool:
-        """Check if any disconnected player has the minimum card and should auto-play"""
-        if not self.disconnected_players:
-            return False
-            
-        # Find the minimum card among all remaining hands
-        all_remaining = []
-        for pid, hand in self.player_hands.items():
-            if hand.cards:  # Only consider players with cards remaining
-                for card in hand.cards:
-                    all_remaining.append((card, pid))
-        
-        if not all_remaining:
-            return False
-            
-        all_remaining.sort(key=lambda x: x[0])
-        min_card, min_player = all_remaining[0]
-        
-        # Check if the player with minimum card is disconnected and timeout has passed
-        if min_player in self.disconnected_players:
-            disconnect_time = self.disconnect_times.get(min_player)
-            if disconnect_time:
-                elapsed = (datetime.now() - disconnect_time).total_seconds()
-                if elapsed >= self.AUTO_PLAY_DELAY_SECONDS:
-                    return True
-        
-        return False
-    
-    def _auto_play_disconnected_cards(self) -> Optional[Dict[str, Any]]:
-        """Auto-play cards for disconnected players who have been gone too long"""
-        if not self.disconnected_players or self.status != GameStatus.PLAYING:
-            return None
-            
-        result = None
-        auto_played_any = True
-        
-        # Keep auto-playing while disconnected players have minimum cards
-        while auto_played_any and self.status == GameStatus.PLAYING:
-            auto_played_any = False
-            
-            # Find minimum card
-            all_remaining = []
-            for pid, hand in self.player_hands.items():
-                if hand.cards:
-                    for card in hand.cards:
-                        all_remaining.append((card, pid))
-            
-            if not all_remaining:
-                break
-                
-            all_remaining.sort(key=lambda x: x[0])
-            min_card, min_player = all_remaining[0]
-            
-            # Check if this player is disconnected and timeout passed
-            if min_player in self.disconnected_players:
-                disconnect_time = self.disconnect_times.get(min_player)
-                if disconnect_time:
-                    elapsed = (datetime.now() - disconnect_time).total_seconds()
-                    if elapsed >= self.AUTO_PLAY_DELAY_SECONDS:
-                        # Auto-play this card
-                        result = self._handle_play(min_player, min_card)
-                        auto_played_any = True
-                        self.log_action("auto_play", min_player, {
-                            "card": min_card,
-                            "reason": "disconnected",
-                            "elapsed_seconds": elapsed
-                        })
-        
-        return result
         
     def get_game_type(self) -> str:
         return "classic"
@@ -215,10 +140,6 @@ class ClassicCarduitive(Game):
         - 'advance': Advance to next level (after success)
         - 'restart': Restart current level (after failure)
         """
-        # Check if we should auto-play for disconnected players before processing
-        if self.status == GameStatus.PLAYING and self.disconnected_players:
-            self._auto_play_disconnected_cards()
-        
         # Check if this is a progression action
         if action == "advance":
             return self._handle_advance()
@@ -273,7 +194,7 @@ class ClassicCarduitive(Game):
             return {"error": "Card not in player's hand"}
         
         # Check if card can be played
-        # Must play the LOWEST remaining card across ALL players
+        # Must play the LOWEST remaining card across ALL players (static game logic)
         all_remaining_cards = []
         for h in self.player_hands.values():
             all_remaining_cards.extend(h.cards)
@@ -347,7 +268,7 @@ class ClassicCarduitive(Game):
         Get game state visible to all players.
         Excludes private card values.
         """
-        # Calculate the minimum remaining card across all players
+        # Calculate the minimum remaining card across ALL players (static game logic)
         all_remaining = []
         for h in self.player_hands.values():
             all_remaining.extend(h.cards)
