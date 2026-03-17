@@ -8,6 +8,7 @@
 - NodePort services (no LoadBalancer fees)
 - Cloudflare SSL (free)
 - Google Artifact Registry (~$0.20/month)
+- GCP Secret Manager for secrets (free tier: 10,000 access operations/month)
 
 ---
 
@@ -23,6 +24,7 @@ Navigate to **APIs & Services > Library** and enable:
 - [ ] Kubernetes Engine API
 - [ ] Artifact Registry API
 - [ ] Compute Engine API
+- [ ] Secret Manager API
 
 ### 1.3 Create Artifact Registry Repository
 1. Go to **Artifact Registry > Repositories**
@@ -104,21 +106,120 @@ Add these **Repository secrets**:
 
 ---
 
-## Step 6: Configure Secrets File
+## Step 6: Configure Secrets in GCP Secret Manager
 
-Edit `k8s-ultra-cheap/08-secrets.yaml`:
+### 6.1 Enable Secret Manager API
+1. Go to **Secret Manager** in GCP Console
+2. If not enabled, click **Enable API**
+
+### 6.2 Create Database Password Secret
+1. Click **Create Secret**
+2. Name: `postgres-password`
+3. Secret value: A strong password (e.g., generate with: `openssl rand -base64 32`)
+4. Click **Create**
+
+### 6.3 Create Application Secrets Secret
+Create a secret named `app-secrets` with this JSON structure:
+
+```json
+{
+  "database-url": "postgresql+asyncpg://postgres:YOUR_POSTGRES_PASSWORD@postgres:5432/carduitive3",
+  "secret-key": "YOUR_64_CHAR_HEX_SECRET_KEY",
+  "google-client-id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+  "google-client-secret": "YOUR_GOOGLE_CLIENT_SECRET",
+  "frontend-url": "https://yourdomain.com"
+}
+```
+
+**How to generate values:**
+- `secret-key`: Run `python3 -c "import secrets; print(secrets.token_hex(32))"`
+- `google-client-id` & `google-client-secret`: From [Google Cloud Console Credentials](https://console.cloud.google.com/apis/credentials)
+- Replace `YOUR_POSTGRES_PASSWORD` with the same password from Step 6.2
+
+---
+
+## Step 7: Create Kubernetes Secrets from Secret Manager
+
+After the cluster is running, you need to sync GCP Secret Manager secrets to Kubernetes.
+
+### Option A: Using Cloud Shell (Recommended)
+
+1. Open **Cloud Shell** in GCP Console (top right toolbar)
+2. Connect to your cluster:
+   ```bash
+   gcloud container clusters get-credentials carduitive3-cluster --zone=us-east1-b
+   ```
+
+3. Create postgres-secret:
+   ```bash
+   # Get password from Secret Manager
+   DB_PASSWORD=$(gcloud secrets versions access latest --secret=postgres-password)
+   
+   # Create Kubernetes secret
+   kubectl create secret generic postgres-secret \
+     --namespace=carduitive3 \
+     --from-literal=username=postgres \
+     --from-literal=password="$DB_PASSWORD"
+   ```
+
+4. Create app-secrets:
+   ```bash
+   # Get app secrets from Secret Manager
+   APP_SECRETS=$(gcloud secrets versions access latest --secret=app-secrets)
+   
+   # Parse JSON and create Kubernetes secret
+   echo "$APP_SECRETS" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | \
+   kubectl create secret generic app-secrets \
+     --namespace=carduitive3 \
+     --from-literal=database-url="$(echo "$APP_SECRETS" | jq -r '.database-url')" \
+     --from-literal=secret-key="$(echo "$APP_SECRETS" | jq -r '.secret-key')" \
+     --from-literal=google-client-id="$(echo "$APP_SECRETS" | jq -r '.google-client-id')" \
+     --from-literal=google-client-secret="$(echo "$APP_SECRETS" | jq -r '.google-client-secret')" \
+     --from-literal=frontend-url="$(echo "$APP_SECRETS" | jq -r '.frontend-url')"
+   ```
+
+5. Verify secrets created:
+   ```bash
+   kubectl get secrets -n carduitive3
+   ```
+
+### Option B: One-Step Script
+
+Save this as `create-secrets.sh` and run in Cloud Shell:
 
 ```bash
-# Replace these values:
-# 1. Strong password for PostgreSQL
-# 2. Generate SECRET_KEY: python3 -c "import secrets; print(secrets.token_hex(32))"
-# 3. Your Google OAuth credentials from console.cloud.google.com/apis/credentials
-# 4. Your domain (e.g., https://yourdomain.com)
+#!/bin/bash
+NAMESPACE=carduitive3
+
+# Create namespace if doesn't exist
+kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+
+# Database secret
+DB_PASSWORD=$(gcloud secrets versions access latest --secret=postgres-password)
+kubectl create secret generic postgres-secret \
+  --namespace=$NAMESPACE \
+  --from-literal=username=postgres \
+  --from-literal=password="$DB_PASSWORD" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# App secrets
+APP_SECRETS=$(gcloud secrets versions access latest --secret=app-secrets)
+kubectl create secret generic app-secrets \
+  --namespace=$NAMESPACE \
+  --from-literal=database-url="$(echo "$APP_SECRETS" | jq -r '.database-url')" \
+  --from-literal=secret-key="$(echo "$APP_SECRETS" | jq -r '.secret-key')" \
+  --from-literal=google-client-id="$(echo "$APP_SECRETS" | jq -r '.google-client-id')" \
+  --from-literal=google-client-secret="$(echo "$APP_SECRETS" | jq -r '.google-client-secret')" \
+  --from-literal=frontend-url="$(echo "$APP_SECRETS" | jq -r '.frontend-url')" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+echo "Secrets created successfully!"
+kubectl get secrets -n $NAMESPACE
 ```
 
 ---
 
-## Step 7: Update Google OAuth Redirect URIs
+## Step 8: Update Google OAuth Redirect URIs
 
 1. Go to [Google Cloud Console > APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials)
 2. Edit your OAuth 2.0 Client ID
@@ -133,7 +234,7 @@ Edit `k8s-ultra-cheap/08-secrets.yaml`:
 
 ---
 
-## Step 8: Deploy!
+## Step 9: Deploy!
 
 ### Option A: Automatic (GitHub Actions)
 1. Commit and push changes
@@ -147,8 +248,15 @@ If you prefer manual control, you can deploy from Cloud Shell:
 # Connect to cluster
 gcloud container clusters get-credentials carduitive3-cluster --zone=us-east1-b
 
-# Apply manifests
-kubectl apply -f k8s-ultra-cheap/
+# Apply manifests (apply secrets first!)
+kubectl apply -f k8s-ultra-cheap/00-namespace.yaml
+kubectl apply -f k8s-ultra-cheap/01-postgres-pvc.yaml
+kubectl apply -f k8s-ultra-cheap/02-postgres-deployment.yaml
+kubectl apply -f k8s-ultra-cheap/03-postgres-service.yaml
+kubectl apply -f k8s-ultra-cheap/04-backend-deployment.yaml
+kubectl apply -f k8s-ultra-cheap/05-backend-service.yaml
+kubectl apply -f k8s-ultra-cheap/06-frontend-deployment.yaml
+kubectl apply -f k8s-ultra-cheap/07-frontend-service.yaml
 
 # Check status
 kubectl get pods -n carduitive3
@@ -157,7 +265,7 @@ kubectl get services -n carduitive3
 
 ---
 
-## Step 9: Verify Deployment
+## Step 10: Verify Deployment
 
 1. Check pods are running:
    ```
@@ -193,12 +301,14 @@ kubectl get services -n carduitive3
 - Ensure Cloudflare proxy is enabled (orange cloud)
 
 ### Database connection errors
-- Check secrets are applied: `kubectl get secrets -n carduitive3`
-- Verify initContainer waited for postgres: `kubectl logs deployment/backend -n carduitive3`
+- Check secrets exist: `kubectl get secrets -n carduitive3`
+- Verify secret values: `kubectl get secret app-secrets -n carduitive3 -o jsonpath='{.data}' | base64 -d`
+- Check initContainer waited for postgres: `kubectl logs deployment/backend -n carduitive3`
 
 ### OAuth not working
-- Verify redirect URI in Google Console matches exactly
-- Check `FRONTEND_URL` secret matches your domain with `https://`
+- Verify redirect URI in Google Console matches exactly (including https://)
+- Check `frontend-url` secret value includes `https://`
+- Ensure OAuth credentials are from the same GCP project
 
 ---
 
@@ -207,10 +317,15 @@ kubectl get services -n carduitive3
 ### Update deployment:
 Just push to `main` branch - GitHub Actions will rebuild and deploy automatically.
 
+### Update secrets:
+1. Update value in GCP Secret Manager
+2. Re-run the secret creation command in Cloud Shell to sync to Kubernetes
+
 ### View logs:
 ```bash
 kubectl logs deployment/backend -n carduitive3 -f
 kubectl logs deployment/frontend -n carduitive3 -f
+kubectl logs deployment/postgres -n carduitive3 -f
 ```
 
 ### Restart a pod:
@@ -232,6 +347,7 @@ kubectl exec -it deployment/postgres -n carduitive3 -- pg_dump -U postgres cardu
 | 1x e2-micro node | ~$15 |
 | 5GB persistent disk | ~$0.20 |
 | Artifact Registry | ~$0.10 |
+| Secret Manager (10K ops) | Free |
 | Egress (minimal) | ~$1-5 |
 | **Total** | **~$17-21** |
 
@@ -248,6 +364,8 @@ kubectl exec -it deployment/postgres -n carduitive3 -- pg_dump -U postgres cardu
 ✅ **SSL included**: Free via Cloudflare
 
 ✅ **Custom domain**: Works with your own domain
+
+✅ **Secrets security**: All sensitive data stored in GCP Secret Manager, never in git
 
 ---
 
