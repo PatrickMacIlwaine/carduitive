@@ -5,7 +5,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Starting carduitive3 backend...${NC}"
+echo -e "${YELLOW}Starting carduitive backend...${NC}"
 
 # Initialize database
 echo -e "${YELLOW}Initializing database...${NC}"

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/carduitive3"
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/carduitive"
     )
     
     # Security
