@@ -165,6 +165,10 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
     except WebSocketDisconnect:
         lobby_manager_ws.disconnect(websocket)
         
+        # Notify game that player disconnected (for auto-play logic)
+        if player_id:
+            lobby_manager.handle_player_disconnect(lobby_code, player_id)
+        
         # Broadcast updated lobby state
         lobby = lobby_manager.get_lobby(lobby_code)
         if lobby:
