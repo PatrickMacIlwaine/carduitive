@@ -1,4 +1,4 @@
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from typing import Dict, List, Optional
 import json
 from datetime import datetime

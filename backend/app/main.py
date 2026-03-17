@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
@@ -78,7 +78,7 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
         else:
             print(f"DEBUG No player found for session: {session_id}")
     else:
-        print(f"DEBUG No session cookie found")
+        print("DEBUG No session cookie found")
     
     # Connect to lobby room with player tracking
     await lobby_manager_ws.connect(websocket, lobby_code, player_id)

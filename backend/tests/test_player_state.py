@@ -5,11 +5,8 @@ Test game state preservation when players leave and rejoin the lobby.
 import sys
 sys.path.insert(0, '/Users/Patrick/code/carduitive/backend')
 
-from app.lobby_manager import LobbyManager, Lobby, Player
-from app.games.classic import ClassicCarduitive
-from app.games.factory import GameFactory
+from app.lobby_manager import LobbyManager
 from dataclasses import dataclass
-from typing import List, Dict, Any
 
 
 @dataclass
@@ -36,29 +33,29 @@ def test_player_leave_during_game_preserves_state():
     player1 = lobby.add_player("Alice", is_host=True)
     player2 = lobby.add_player("Bob")
     
-    print(f"Created lobby with players:")
+    print("Created lobby with players:")
     print(f"  P1: {player1.id} (Alice)")
     print(f"  P2: {player2.id} (Bob)")
     
     # Start game
-    result = lobby_manager.start_game(code, "classic", {"deck_size": 100, "timing_mode": "relaxed"})
+    lobby_manager.start_game(code, "classic", {"deck_size": 100, "timing_mode": "relaxed"})
     
     # Get initial hands
     p1_hand_before = lobby.game.player_hands[player1.id].cards.copy()
     p2_hand_before = lobby.game.player_hands[player2.id].cards.copy()
     
-    print(f"\nInitial hands:")
+    print("\nInitial hands:")
     print(f"  Alice (P1): {p1_hand_before}")
     print(f"  Bob (P2): {p2_hand_before}")
     
     # Alice plays one card
     p1_card = p1_hand_before[0]
-    game_state = lobby.game.handle_action(player1.id, "play", {"card": p1_card})
+    _ = lobby.game.handle_action(player1.id, "play", {"card": p1_card})  # game_state
     print(f"\nAlice played {p1_card}")
     print(f"  Played cards: {lobby.game.played_cards}")
     
     # Now Alice leaves the lobby
-    print(f"\nAlice leaves the lobby...")
+    print("\nAlice leaves the lobby...")
     lobby_manager.leave_lobby(code, player1.id)
     
     # Check: Is Alice still in the lobby's player list?
@@ -99,14 +96,14 @@ def test_player_rejoin_gets_same_state():
     lobby = lobby_manager.create_lobby(code)
     
     player1 = lobby.add_player("Alice", is_host=True)
-    player2 = lobby.add_player("Bob")
+    _ = lobby.add_player("Bob")  # player2
     
     # Store original session for rejoin
     original_session = player1.session_id
     original_player_id = player1.id
     
     # Start game
-    result = lobby_manager.start_game(code, "classic", {"deck_size": 100, "timing_mode": "relaxed"})
+    lobby_manager.start_game(code, "classic", {"deck_size": 100, "timing_mode": "relaxed"})
     
     # Alice plays one card
     p1_hand = lobby.game.player_hands[player1.id].cards
@@ -118,7 +115,7 @@ def test_player_rejoin_gets_same_state():
     print(f"  Played cards: {lobby.game.played_cards}")
     
     # Alice leaves
-    print(f"\nAlice leaves the lobby...")
+    print("\nAlice leaves the lobby...")
     lobby_manager.leave_lobby(code, player1.id)
     
     # Try to rejoin using session-based lookup (same as API does)
@@ -127,7 +124,7 @@ def test_player_rejoin_gets_same_state():
     # This is what the API does - check for existing session first
     rejoined_player = lobby.get_player_by_session(original_session)
     
-    print(f"\nRejoin result:")
+    print("\nRejoin result:")
     print(f"  Rejoined player: {rejoined_player}")
     
     if rejoined_player:
@@ -169,29 +166,29 @@ def test_disconnect_vs_leave_behavior():
     lobby_manager.start_game(code, "classic", {"deck_size": 100, "timing_mode": "relaxed"})
     
     p1_hand = lobby.game.player_hands[player1.id].cards.copy()
-    print(f"Initial hands:")
+    print("Initial hands:")
     print(f"  Alice: {p1_hand}")
     print(f"  Bob: {lobby.game.player_hands[player2.id].cards}")
     
     # Test: Handle disconnect (should mark player as disconnected but keep state)
-    print(f"\n--- Testing handle_player_disconnect ---")
+    print("\n--- Testing handle_player_disconnect ---")
     lobby.game.handle_player_disconnect(player1.id)
     
     alice_hand_after_disconnect = lobby.game.player_hands.get(player1.id)
     is_disconnected = player1.id in lobby.game.disconnected_players
     
-    print(f"After disconnect:")
+    print("After disconnect:")
     print(f"  Alice in disconnected_players: {is_disconnected}")
     print(f"  Alice's hand preserved: {alice_hand_after_disconnect.cards if alice_hand_after_disconnect else 'NOT FOUND'}")
     
     # Now test leave_lobby behavior
-    print(f"\n--- Testing leave_lobby (the problematic path) ---")
+    print("\n--- Testing leave_lobby (the problematic path) ---")
     lobby_manager.leave_lobby(code, player1.id)
     
     alice_in_lobby = any(p.id == player1.id for p in lobby.players)
     alice_hand_after_leave = lobby.game.player_hands.get(player1.id)
     
-    print(f"After leave_lobby:")
+    print("After leave_lobby:")
     print(f"  Alice still in lobby.players: {alice_in_lobby}")
     print(f"  Alice's hand in game: {alice_hand_after_leave.cards if alice_hand_after_leave else 'NOT FOUND'}")
     
@@ -218,7 +215,7 @@ def test_rejoin_with_valid_session():
     lobby = lobby_manager.create_lobby(code)
     
     player1 = lobby.add_player("Alice", is_host=True)
-    player2 = lobby.add_player("Bob")
+    _ = lobby.add_player("Bob")  # player2
     
     original_session = player1.session_id
     original_id = player1.id
@@ -230,7 +227,7 @@ def test_rejoin_with_valid_session():
     p1_hand = lobby.game.player_hands[player1.id].cards
     lobby.game.handle_action(player1.id, "play", {"card": p1_hand[0]})
     
-    print(f"After playing:")
+    print("After playing:")
     print(f"  Played cards: {lobby.game.played_cards}")
     print(f"  Alice hand: {lobby.game.player_hands[player1.id].cards}")
     
@@ -240,7 +237,7 @@ def test_rejoin_with_valid_session():
     # Check what happens with session-based rejoin
     rejoined_player = lobby.get_player_by_session(original_session)
     
-    print(f"\nAfter leave_lobby:")
+    print("\nAfter leave_lobby:")
     print(f"  get_player_by_session('{original_session[:8]}...'): {rejoined_player}")
     
     if rejoined_player:

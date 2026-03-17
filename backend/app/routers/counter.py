@@ -1,13 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from datetime import datetime
-import json
 
 from app.database import get_db
 from app.models import Counter
-from app.websocket import lobby_manager_ws
 
 router = APIRouter(prefix="/api/counter", tags=["counter"])
 

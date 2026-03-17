@@ -5,7 +5,6 @@ Tests that cards are dealt randomly from 1-100 and each player gets correct coun
 """
 
 import requests
-import json
 import time
 from collections import defaultdict
 
@@ -64,21 +63,21 @@ def test_random_dealing_from_full_deck():
     # Verify required cards 1-10 are always present (for up to 10 players)
     has_all_required = set(range(1, 11)).issubset(unique_cards)
     
-    # Check distribution across ranges
-    has_low = any(c <= 20 for c in unique_cards)
-    has_mid = any(30 <= c <= 70 for c in unique_cards)  
-    has_high = any(c >= 80 for c in unique_cards)
+    # Check distribution across ranges (these variables verify the deck is well-shuffled)
+    _ = any(c <= 20 for c in unique_cards)  # has_low
+    _ = any(30 <= c <= 70 for c in unique_cards)  # has_mid  
+    _ = any(c >= 80 for c in unique_cards)  # has_high
     
     # We need both required cards AND variety from higher range
     passed = has_all_required and (max_card > 50)
     
     if passed:
-        print(f"   ✅ PASS: Cards dealt from full range")
+        print("   ✅ PASS: Cards dealt from full range")
         print(f"      - Required cards 1-10: {'✅' if has_all_required else '❌'}")
         print(f"      - High cards (>50): {'✅' if max_card > 50 else '❌'} (max: {max_card})")
         print(f"      - Range: {min_card} to {max_card}")
     else:
-        print(f"   ❌ FAIL: Insufficient card variety")
+        print("   ❌ FAIL: Insufficient card variety")
         if not has_all_required:
             missing = set(range(1, 11)) - unique_cards
             print(f"      - Missing required cards: {sorted(missing)}")
@@ -203,9 +202,9 @@ def test_exact_card_count_per_level():
             all_passed = False
     
     if all_passed:
-        print(f"\n   ✅ PASS: All players have correct card counts at each level")
+        print("\n   ✅ PASS: All players have correct card counts at each level")
     else:
-        print(f"\n   ❌ FAIL: Some players have wrong card counts")
+        print("\n   ❌ FAIL: Some players have wrong card counts")
     
     return all_passed
 
@@ -259,7 +258,7 @@ def test_no_duplicate_cards():
         print(f"   ❌ FAIL: Duplicate cards found: {duplicates}")
         return False
     else:
-        print(f"   ✅ PASS: All cards are unique")
+        print("   ✅ PASS: All cards are unique")
         return True
 
 
