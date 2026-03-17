@@ -3,7 +3,7 @@ Test game state preservation when players leave and rejoin the lobby.
 """
 
 import sys
-sys.path.insert(0, '/Users/Patrick/code/carduitive3/backend')
+sys.path.insert(0, '/Users/Patrick/code/carduitive/backend')
 
 from app.lobby_manager import LobbyManager, Lobby, Player
 from app.games.classic import ClassicCarduitive
