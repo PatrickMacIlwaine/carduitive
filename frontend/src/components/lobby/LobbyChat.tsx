@@ -9,6 +9,9 @@ interface LobbyChatProps {
   messages: ChatMessage[]
   onSendMessage: (message: string) => void
   disabled?: boolean
+  mode?: 'default' | 'overlay'
+  isOpen?: boolean
+  onToggle?: () => void
 }
 
 function ChatMessageItem({ message }: { message: ChatMessage }) {
@@ -51,12 +54,19 @@ function ChatMessageItem({ message }: { message: ChatMessage }) {
   )
 }
 
-export function LobbyChat({ messages, onSendMessage, disabled }: LobbyChatProps) {
+function DefaultChat({ 
+  messages, 
+  onSendMessage, 
+  disabled 
+}: { 
+  messages: ChatMessage[]
+  onSendMessage: (message: string) => void
+  disabled?: boolean
+}) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -64,14 +74,9 @@ export function LobbyChat({ messages, onSendMessage, disabled }: LobbyChatProps)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || disabled) return
-
     onSendMessage(input.trim())
     setInput('')
-    
-    // Refocus input after sending
-    setTimeout(() => {
-      inputRef.current?.focus()
-    }, 0)
+    setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   return (
@@ -87,7 +92,6 @@ export function LobbyChat({ messages, onSendMessage, disabled }: LobbyChatProps)
       </CardHeader>
       
       <CardContent className="flex-1 flex flex-col min-h-0">
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-1 pr-2 -mr-2 mb-4">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
@@ -103,7 +107,6 @@ export function LobbyChat({ messages, onSendMessage, disabled }: LobbyChatProps)
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
         <form onSubmit={handleSubmit} className="flex gap-2 flex-shrink-0">
           <Input
             ref={inputRef}
@@ -124,5 +127,132 @@ export function LobbyChat({ messages, onSendMessage, disabled }: LobbyChatProps)
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+function OverlayChat({ 
+  messages, 
+  onSendMessage, 
+  disabled,
+  isOpen,
+  onToggle
+}: { 
+  messages: ChatMessage[]
+  onSendMessage: (message: string) => void
+  disabled?: boolean
+  isOpen?: boolean
+  onToggle?: () => void
+}) {
+  const [input, setInput] = useState('')
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim() || disabled) return
+    onSendMessage(input.trim())
+    setInput('')
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  if (!isOpen) {
+    return (
+      <Button
+        variant="outline"
+        size="icon"
+        className="fixed right-4 bottom-4 z-50 h-12 w-12 rounded-full shadow-lg bg-background/90 backdrop-blur"
+        onClick={onToggle}
+      >
+        <MessageSquare className="w-5 h-5" />
+      </Button>
+    )
+  }
+
+  return (
+    <div className="fixed right-4 bottom-4 z-50 w-80 max-h-[300px] flex flex-col rounded-lg shadow-xl border bg-background/95 backdrop-blur">
+      <div className="flex items-center justify-between px-3 py-2 border-b">
+        <span className="text-sm font-medium flex items-center gap-2">
+          <MessageSquare className="w-4 h-4" />
+          Game Chat
+        </span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle}>
+          <span className="text-lg">×</span>
+        </Button>
+      </div>
+      
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-2 space-y-1 max-h-[180px]"
+        style={{ 
+          maskImage: 'linear-gradient(to bottom, transparent, black 10%, black 90%, transparent)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 10%, black 90%, transparent)'
+        }}
+      >
+        {messages.length === 0 ? (
+          <div className="text-center text-muted-foreground py-4 text-sm">
+            No messages yet
+          </div>
+        ) : (
+          messages.map((message) => (
+            <ChatMessageItem key={message.id} message={message} />
+          ))
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex gap-1 p-2 border-t">
+        <Input
+          ref={inputRef}
+          placeholder={disabled ? "..." : "Type..."}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={disabled}
+          className="flex-1 h-8 text-sm"
+          maxLength={200}
+        />
+        <Button 
+          type="submit" 
+          size="icon"
+          className="h-8 w-8"
+          disabled={disabled || !input.trim()}
+        >
+          <Send className="w-3 h-3" />
+        </Button>
+      </form>
+    </div>
+  )
+}
+
+export function LobbyChat({ 
+  messages, 
+  onSendMessage, 
+  disabled,
+  mode = 'default',
+  isOpen,
+  onToggle
+}: LobbyChatProps) {
+  if (mode === 'overlay') {
+    return (
+      <OverlayChat 
+        messages={messages} 
+        onSendMessage={onSendMessage} 
+        disabled={disabled}
+        isOpen={isOpen}
+        onToggle={onToggle}
+      />
+    )
+  }
+
+  return (
+    <DefaultChat 
+      messages={messages} 
+      onSendMessage={onSendMessage} 
+      disabled={disabled}
+    />
   )
 }

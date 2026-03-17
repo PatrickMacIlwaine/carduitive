@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { HelpCircle } from 'lucide-react'
+import { HelpCircle, Wifi, WifiOff, Crown } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { GameResults } from './GameResults'
 
 interface GameBoardProps {
   gameState: {
@@ -30,6 +31,8 @@ interface GameBoardProps {
   players: Array<{
     id: string
     name: string
+    is_connected?: boolean
+    is_host?: boolean
   }>
   onPlayCard: (card: number) => void
   onAdvance: () => void
@@ -74,148 +77,178 @@ export function GameBoard({
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8">
-      {/* Header - Level and Status */}
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
-          <span className="font-bold text-lg">Level {level}</span>
+    <div className="w-full h-full flex flex-col relative">
+      {/* Top: Level Info */}
+      <div className="flex-shrink-0 py-4 px-4">
+        <div className="flex justify-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
+            <span className="font-bold text-lg">Level {level}</span>
+            <span className="text-sm opacity-70">•</span>
+            <span className="text-sm">Next: {next_expected}</span>
+          </div>
         </div>
-        <p className="text-muted-foreground">
-          {status === 'playing' && `Play cards in order: ${next_expected}, ${next_expected + 1}, ${next_expected + 2}...`}
+      </div>
+
+      {/* Opponent Cards */}
+      <div className="flex-shrink-0 py-4 px-4">
+        <div className="flex justify-center items-end gap-8" style={{ perspective: '1000px' }}>
+          {otherPlayers.map((player, index) => {
+            const handInfo = player_hands[player.id] || { card_count: 0 }
+            const cardCount = handInfo.card_count
+            const totalPlayers = otherPlayers.length
+            const rotation = (index - (totalPlayers - 1) / 2) * 10
+            const isConnected = player.is_connected ?? true
+            
+            return (
+              <motion.div
+                key={player.id}
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: index * 0.1 }}
+                className={cn(
+                  "relative flex flex-col items-center",
+                  !isConnected && "opacity-50 grayscale"
+                )}
+                style={{
+                  transform: `rotate(${rotation}deg)`,
+                  zIndex: index
+                }}
+              >
+                {/* Connection Status Indicator */}
+                <div className={cn(
+                  "absolute -top-2 -right-1 z-20 w-5 h-5 rounded-full flex items-center justify-center border-2",
+                  isConnected 
+                    ? "bg-green-500 border-green-600" 
+                    : "bg-red-500 border-red-600"
+                )}>
+                  {isConnected ? (
+                    <Wifi className="w-3 h-3 text-white" />
+                  ) : (
+                    <WifiOff className="w-3 h-3 text-white" />
+                  )}
+                </div>
+                
+                {/* Fanned Card Backs */}
+                <div className="relative" style={{ height: '6rem', width: '4rem' }}>
+                  {Array.from({ length: Math.min(cardCount, 5) }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "absolute w-14 h-20 md:w-16 md:h-24 rounded-lg border-2 shadow-md",
+                        isConnected 
+                          ? "bg-slate-700 border-slate-600" 
+                          : "bg-slate-500 border-slate-400"
+                      )}
+                      style={{
+                        transform: `translateX(${i * 6}px) translateY(${i * -1}px) rotate(${i * 2}deg)`,
+                        zIndex: i
+                      }}
+                    >
+                      {i === Math.min(cardCount, 5) - 1 && (
+                        <HelpCircle className="w-8 h-8 md:w-10 md:h-10 text-slate-400 absolute inset-0 m-auto" />
+                      )}
+                    </div>
+                  ))}
+                  {cardCount > 5 && (
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center z-30">
+                      +{cardCount - 5}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Player Info */}
+                <div className="mt-2 text-center">
+                  <p className="text-xs font-medium truncate max-w-[80px]">{player.name}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {cardCount} card{cardCount !== 1 ? 's' : ''}
+                  </p>
+                  {!isConnected && (
+                    <span className="text-[10px] text-red-500 font-medium">Offline</span>
+                  )}
+                  {player.is_host && (
+                    <div className="flex items-center justify-center gap-0.5 text-yellow-500">
+                      <Crown className="w-3 h-3" />
+                      <span className="text-[10px]">Host</span>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Center: Game Status and Last Played */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-2">
+        {/* Status Message */}
+        <p className="text-sm text-muted-foreground text-center mb-6">
           {status === 'success' && progression?.message}
           {status === 'failed' && progression?.message}
         </p>
+
+        {/* Last Played Card */}
+        <div className="mb-6">
+          <p className="text-sm text-muted-foreground text-center mb-3">Last Played</p>
+          {lastPlayedCard ? (
+            <motion.div
+              key={lastPlayedCard}
+              initial={{ scale: 0.8, rotate: -10 }}
+              animate={{ scale: 1, rotate: 0 }}
+              className="w-28 h-40 md:w-36 md:h-52 rounded-xl bg-white border-2 border-slate-200 shadow-2xl flex items-center justify-center relative overflow-hidden"
+            >
+              <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-400 to-transparent" />
+              <span className="text-6xl md:text-7xl font-bold text-slate-800">
+                {lastPlayedCard}
+              </span>
+              <span className="absolute top-3 left-3 text-lg font-bold text-slate-400">
+                {lastPlayedCard}
+              </span>
+              <span className="absolute bottom-3 right-3 text-lg font-bold text-slate-400 rotate-180">
+                {lastPlayedCard}
+              </span>
+            </motion.div>
+          ) : (
+            <div className="w-28 h-40 md:w-36 md:h-52 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50/50">
+              <span className="text-slate-400 text-sm">Waiting...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Progression Controls */}
+        {status === 'success' && (
+          <Button 
+            size="lg" 
+            onClick={onAdvance}
+            className="px-8"
+          >
+            Advance to Level {level + 1}
+          </Button>
+        )}
+        {status === 'failed' && (
+          <Button 
+            size="lg" 
+            variant="destructive"
+            onClick={onRestart}
+            className="px-8"
+          >
+            Try Level {level} Again
+          </Button>
+        )}
       </div>
 
-      {/* Main Game Area */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left: Other Players */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            Other Players
-          </h3>
-          <div className="space-y-3">
-            {otherPlayers.map(player => {
-              const handInfo = player_hands[player.id] || { card_count: 0 }
-              return (
-                <Card key={player.id} className="bg-muted/50">
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-10 rounded bg-primary/20 flex items-center justify-center border border-primary/30">
-                        <HelpCircle className="w-4 h-4 text-primary/60" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{player.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {handInfo.card_count} card{handInfo.card_count !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Center: Last Played Card */}
-        <div className="flex flex-col items-center justify-center space-y-6">
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-4">Last Played</p>
-            {lastPlayedCard ? (
-              <motion.div
-                key={lastPlayedCard}
-                initial={{ scale: 0.8, rotate: -10 }}
-                animate={{ scale: 1, rotate: 0 }}
-                className="w-32 h-44 rounded-xl bg-white border-2 border-slate-200 shadow-xl flex items-center justify-center relative overflow-hidden"
-              >
-                {/* Card pattern */}
-                <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-400 to-transparent" />
-                
-                {/* Card value */}
-                <span className="text-5xl font-bold text-slate-800">
-                  {lastPlayedCard}
-                </span>
-                
-                {/* Corner decorations */}
-                <span className="absolute top-2 left-2 text-sm font-bold text-slate-400">
-                  {lastPlayedCard}
-                </span>
-                <span className="absolute bottom-2 right-2 text-sm font-bold text-slate-400 rotate-180">
-                  {lastPlayedCard}
-                </span>
-              </motion.div>
-            ) : (
-              <div className="w-32 h-44 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center">
-                <span className="text-slate-400 text-sm">No cards yet</span>
-              </div>
-            )}
-          </div>
-
-          {/* Progression Controls */}
-          {status === 'success' && (
-            <Button 
-              size="lg" 
-              onClick={onAdvance}
-              className="w-full"
-            >
-              Advance to Level {level + 1}
-            </Button>
-          )}
-          {status === 'failed' && (
-            <Button 
-              size="lg" 
-              variant="destructive"
-              onClick={onRestart}
-              className="w-full"
-            >
-              Try Level {level} Again
-            </Button>
-          )}
-        </div>
-
-        {/* Right: Played Sequence */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            Sequence
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {played_cards.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Waiting for first card...</p>
-            ) : (
-              played_cards.map((card, index) => (
-                <motion.div
-                  key={`${card}-${index}`}
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="w-10 h-14 rounded bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold"
-                >
-                  {card}
-                </motion.div>
-              ))
-            )}
-          </div>
-          {played_cards.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {played_cards.length} card{played_cards.length !== 1 ? 's' : ''} played
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom: Your Hand (Fanned Out) */}
-      <div className="space-y-4">
-        <h3 className="text-center text-lg font-semibold">
+      {/* Bottom: Your Hand (Larger and Fanned) */}
+      <div className="flex-shrink-0 py-6 px-4 bg-gradient-to-t from-background to-transparent">
+        <h3 className="text-center text-lg font-semibold mb-4">
           Your Hand
         </h3>
         
         {status === 'playing' ? (
-          <div className="flex justify-center items-end gap-[-20px] md:gap-[-30px]" style={{ perspective: '1000px' }}>
+          <div className="flex justify-center items-end" style={{ perspective: '1000px' }}>
             {myCards.map((card, index) => {
               const isHovered = hoveredCard === card
               const totalCards = myCards.length
-              const rotation = (index - (totalCards - 1) / 2) * 5
+              const rotation = (index - (totalCards - 1) / 2) * 6
+              const horizontalOffset = (index - (totalCards - 1) / 2) * 15
               
               return (
                 <motion.button
@@ -224,41 +257,42 @@ export function GameBoard({
                   onMouseEnter={() => setHoveredCard(card)}
                   onMouseLeave={() => setHoveredCard(null)}
                   whileHover={{ 
-                    y: -20, 
-                    scale: 1.1,
-                    zIndex: 10,
+                    y: -30, 
+                    scale: 1.15,
+                    zIndex: 20,
                     transition: { duration: 0.2 }
                   }}
                   whileTap={{ scale: 0.95 }}
-                  initial={{ y: 0, rotate: rotation }}
+                  initial={{ y: 0, rotate: rotation, x: horizontalOffset }}
                   animate={{ 
-                    y: isHovered ? -20 : 0,
-                    rotate: rotation,
-                    zIndex: isHovered ? 10 : index
+                    y: isHovered ? -30 : 0,
+                    rotate: isHovered ? 0 : rotation,
+                    x: isHovered ? horizontalOffset * 1.2 : horizontalOffset,
+                    zIndex: isHovered ? 20 : index
                   }}
                   className={`
-                    relative w-20 h-28 md:w-24 md:h-36
-                    rounded-lg bg-white border-2 border-slate-300 shadow-lg
+                    relative w-24 h-36 md:w-32 md:h-44
+                    rounded-xl bg-white border-2 border-slate-300 shadow-xl
                     flex items-center justify-center
                     cursor-pointer
-                    hover:border-primary hover:shadow-xl
+                    hover:border-primary hover:shadow-2xl
                     transition-shadow
                   `}
                   style={{
-                    marginLeft: index > 0 ? '-30px' : '0',
+                    marginLeft: index > 0 ? '-40px' : '0',
                     zIndex: index
                   }}
                 >
                   {/* Card value */}
-                  <span className="text-3xl md:text-4xl font-bold text-slate-800">
+                  <span className="text-4xl md:text-5xl font-bold text-slate-800">
                     {card}
                   </span>
                   
                   {/* Corner decorations */}
-                  <span className="absolute top-1 left-2 text-xs font-bold text-slate-400">
+                  <span className="absolute top-2 left-3 text-sm font-bold text-slate-400">
                     {card}
                   </span>
-                  <span className="absolute bottom-1 right-2 text-xs font-bold text-slate-400 rotate-180">
+                  <span className="absolute bottom-2 right-3 text-sm font-bold text-slate-400 rotate-180">
                     {card}
                   </span>
                   
@@ -267,9 +301,9 @@ export function GameBoard({
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="absolute inset-0 bg-primary/10 rounded-lg flex items-center justify-center"
+                      className="absolute inset-0 bg-primary/10 rounded-xl flex items-center justify-center"
                     >
-                      <span className="text-primary font-semibold text-sm bg-white/90 px-2 py-1 rounded">
+                      <span className="text-primary font-bold text-lg bg-white/95 px-4 py-2 rounded-lg shadow-lg">
                         Play
                       </span>
                     </motion.div>
@@ -280,21 +314,32 @@ export function GameBoard({
           </div>
         ) : (
           <div className="text-center py-8">
-            <p className="text-muted-foreground">
-              {status === 'success' ? 'Level Complete!' : 'Level Failed'}
+            <p className="text-muted-foreground text-lg">
+              {status === 'success' ? '🎉 Level Complete!' : '💥 Level Failed'}
             </p>
           </div>
         )}
         
-        <p className="text-center text-sm text-muted-foreground">
-          {myCards.length} card{myCards.length !== 1 ? 's' : ''} in hand
+        <p className="text-center text-sm text-muted-foreground mt-4">
+          {myCards.length} card{myCards.length !== 1 ? 's' : ''} in hand • {played_cards.length} played
         </p>
       </div>
 
-      {/* Debug Info (remove in production) */}
-      <div className="text-center text-xs text-muted-foreground pt-4 border-t">
-        <p>Next expected: {next_expected} | Level: {level} | Status: {status}</p>
-      </div>
+      {/* Game Results Overlay */}
+      {(status === 'success' || status === 'failed') && (
+        <GameResults
+          gameState={{
+            status,
+            level,
+            player_hands,
+            my_hand
+          }}
+          players={players}
+          currentPlayerId={currentPlayerId}
+          onAdvance={onAdvance}
+          onRestart={onRestart}
+        />
+      )}
     </div>
   )
 }

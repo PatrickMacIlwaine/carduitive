@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Wifi, WifiOff, Crown, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -112,6 +113,9 @@ export function LobbyPage() {
   
   const { user } = useAuth()
   
+  // Chat toggle state for game mode
+  const [showGameChat, setShowGameChat] = useState(false)
+  
   const {
     lobby,
     loading,
@@ -168,31 +172,49 @@ export function LobbyPage() {
         onComplete={() => console.log('Countdown complete!')} 
       />
       
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <Link to="/home">
-          <Button variant="ghost" className="pl-0">
-            <ArrowLeft className="mr-2 w-4 h-4" />
-            Back to Home
+      {/* Header - Different for lobby vs game */}
+      {!isPlaying && (
+        <div className="flex justify-between items-start">
+          <Link to="/home">
+            <Button variant="ghost" className="pl-0">
+              <ArrowLeft className="mr-2 w-4 h-4" />
+              Back to Home
+            </Button>
+          </Link>
+          <Button variant="outline" onClick={leaveLobby}>
+            Leave Lobby
           </Button>
-        </Link>
-        <Button variant="outline" onClick={leaveLobby}>
-          Leave Lobby
-        </Button>
-      </div>
+        </div>
+      )}
 
       {isPlaying ? (
-        /* Game Board */
-        <GameBoard
-          gameState={lobby.game_state}
-          currentPlayerId={lobby.you?.id || ''}
-          players={lobby.players.map(p => ({ id: p.id, name: p.name }))}
-          onPlayCard={playCard}
-          onAdvance={advanceLevel}
-          onRestart={restartLevel}
-        />
+        /* Game Mode - With Overlay Chat */
+        <div className="relative">
+          <GameBoard
+            gameState={lobby.game_state}
+            currentPlayerId={lobby.you?.id || ''}
+            players={lobby.players.map(p => ({ 
+              id: p.id, 
+              name: p.name,
+              is_connected: p.is_connected,
+              is_host: p.is_host
+            }))}
+            onPlayCard={playCard}
+            onAdvance={advanceLevel}
+            onRestart={restartLevel}
+          />
+          
+          <LobbyChat
+            mode="overlay"
+            messages={messages}
+            onSendMessage={sendChatMessage}
+            disabled={!wsConnected}
+            isOpen={showGameChat}
+            onToggle={() => setShowGameChat(!showGameChat)}
+          />
+        </div>
       ) : (
-        /* Lobby Interface */
+        /* Lobby Interface - Chat Always Visible */
         <>
           {/* Lobby Header */}
           <LobbyHeader 
@@ -221,7 +243,7 @@ export function LobbyPage() {
               />
             </div>
 
-            {/* Right Column - Chat */}
+            {/* Right Column - Chat (Always visible in lobby) */}
             <div className="lg:col-span-2">
               <LobbyChat
                 messages={messages}

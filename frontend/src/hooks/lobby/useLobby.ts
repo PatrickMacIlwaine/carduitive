@@ -30,6 +30,10 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   
   const wsRef = useRef<WebSocket | null>(null)
   const playerRef = useRef<{ id: string; name: string } | null>(null)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const reconnectAttemptsRef = useRef(0)
+  const MAX_RECONNECT_ATTEMPTS = 5
+  const RECONNECT_DELAY = 3000 // 3 seconds
 
   // Fetch lobby data from API
   const fetchLobby = useCallback(async () => {
@@ -81,6 +85,12 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
       console.log('WebSocket connected to lobby')
       setWsConnected(true)
       setError(null)
+      // Reset reconnection attempts on successful connection
+      reconnectAttemptsRef.current = 0
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
     }
 
     ws.onmessage = (event) => {
@@ -274,6 +284,23 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     ws.onclose = () => {
       console.log('WebSocket disconnected')
       setWsConnected(false)
+      
+      // Attempt to reconnect if we haven't exceeded max attempts
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttemptsRef.current++
+        console.log(`Attempting to reconnect... (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`)
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+          fetchLobby().then(success => {
+            if (success && lobby) {
+              connectWebSocket()
+            }
+          })
+        }, RECONNECT_DELAY)
+      } else {
+        console.log('Max reconnection attempts reached')
+        setError('Connection lost. Please refresh the page to rejoin.')
+      }
     }
 
     ws.onerror = (error) => {
@@ -574,6 +601,10 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   useEffect(() => {
     return () => {
       disconnectWebSocket()
+      // Clear any pending reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
     }
   }, [disconnectWebSocket])
 

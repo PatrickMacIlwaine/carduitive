@@ -195,6 +195,9 @@ async def join_lobby(
             # Mark player as connected on re-join (BEFORE to_dict)
             lobby_manager_ws.connected_players.setdefault(code, set()).add(player.id)
             
+            # Notify game that player reconnected
+            lobby_manager.handle_player_reconnect(code, player.id)
+            
             # Player exists with this session - allow re-join
             lobby_dict = lobby.to_dict(player_id=player.id)
             lobby_dict["you"] = build_you_dict(player)
