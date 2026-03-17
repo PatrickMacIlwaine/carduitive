@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: carduitive3
+  namespace: carduitive
   labels:
     app: frontend
 spec:
@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: us-east1-docker.pkg.dev/PROJECT_ID/carduitive3/carduitive3-frontend:latest
+          image: us-east1-docker.pkg.dev/PROJECT_ID/carduitive/carduitive-frontend:latest
           ports:
             - containerPort: 8080
           resources:
