@@ -63,7 +63,19 @@ class ClassicCarduitive(Game):
         if player_id in self.disconnected_players:
             self.disconnected_players.discard(player_id)
             self.log_action("reconnect", player_id, {"timestamp": datetime.now().isoformat()})
+    
+    def get_game_type(self) -> str:
         
+        # Check if the player with minimum card is disconnected and timeout has passed
+        if min_player in self.disconnected_players:
+            disconnect_time = self.disconnect_times.get(min_player)
+            if disconnect_time:
+                elapsed = (datetime.now() - disconnect_time).total_seconds()
+                if elapsed >= self.AUTO_PLAY_DELAY_SECONDS:
+                    return True
+        
+        return False
+    
     def get_game_type(self) -> str:
         return "classic"
     
@@ -140,6 +152,10 @@ class ClassicCarduitive(Game):
         - 'advance': Advance to next level (after success)
         - 'restart': Restart current level (after failure)
         """
+        # Check if we should auto-play for disconnected players before processing
+        if self.status == GameStatus.PLAYING and self.disconnected_players:
+            self._auto_play_disconnected_cards()
+        
         # Check if this is a progression action
         if action == "advance":
             return self._handle_advance()
