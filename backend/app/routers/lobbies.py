@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Cookie, Response, Request
+from fastapi import APIRouter, HTTPException, Response, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import json
@@ -249,7 +249,6 @@ async def join_lobby(
     lobby_manager_ws.connected_players.setdefault(code, set()).add(player.id)
     
     # Broadcast updated lobby state to all connected WebSocket clients
-    import asyncio
     asyncio.create_task(
         lobby_manager_ws.broadcast_to_lobby(
             json.dumps({
@@ -295,10 +294,6 @@ async def get_messages(
     limit: int = 50
 ):
     """Get chat messages for a lobby."""
-    # Get session cookie dynamically
-    cookie_name = f"lobby_{code}"
-    lobby_session = http_request.cookies.get(cookie_name)
-    
     lobby = lobby_manager.get_lobby(code)
     if not lobby:
         raise HTTPException(status_code=404, detail="Lobby not found")
@@ -450,7 +445,6 @@ async def start_game(
         lobby.updated_at = datetime.now()
         
         # Broadcast countdown to all players
-        import asyncio
         asyncio.create_task(
             lobby_manager_ws.broadcast_to_lobby(
                 json.dumps({
@@ -486,7 +480,7 @@ async def start_game(
     lobby.game_type = request.game_type
     
     # Add system message
-    lobby.add_message("System", "system", f"Game started! Level 1", "system")
+    lobby.add_message("System", "system", "Game started! Level 1", "system")
     
     # Broadcast game started to all WebSocket clients
     asyncio.create_task(
@@ -576,7 +570,6 @@ async def game_action(
             "data": public_state
         }
     
-    import asyncio
     asyncio.create_task(
         lobby_manager_ws.broadcast_to_lobby(
             json.dumps(broadcast_data),

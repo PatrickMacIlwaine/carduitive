@@ -5,10 +5,9 @@ Tests multi-player dealing, privacy, card validation, and progression.
 """
 
 import requests
-import json
 import time
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 BASE_URL = "http://localhost:8000"
 
@@ -328,7 +327,7 @@ def test_level_progression():
         print_result("Setup", False, "Failed to join Player2")
         return False
     
-    print(f"   ✓ Created lobby with 2 players...")
+    print("   ✓ Created lobby with 2 players...")
     
     # Start game
     success, _ = start_game(lobby_code, cookie1)
@@ -357,7 +356,7 @@ def test_level_progression():
     success, result = play_card(lobby_code, max_cookie, max_card)
     
     if result and result.get("status") == "failed":
-        print(f"   ✓ Level failed correctly")
+        print("   ✓ Level failed correctly")
         print(f"   ✓ Progression options: {result.get('progression')}")
         
         # Test restart
@@ -372,7 +371,7 @@ def test_level_progression():
         print(f"   New cards after restart: {restart_result.get('my_hand', {}).get('cards')}")
         
         # After restart, complete level successfully
-        print(f"   Testing success path after restart...")
+        print("   Testing success path after restart...")
         # Get new hands
         success, state1 = get_game_state(lobby_code, cookie1)
         success, state2 = get_game_state(lobby_code, cookie2)
@@ -443,7 +442,7 @@ def test_multiplayer_game_flow():
         # Start game
         success, _ = start_game(lobby_code, players[0]["cookie"])
         if not success:
-            print(f"   ❌ Failed to start game")
+            print("   ❌ Failed to start game")
             all_passed = False
             continue
         
@@ -474,7 +473,7 @@ def test_multiplayer_game_flow():
         print(f"   ✓ Cards dealt: {sorted(actual_cards)} (random from 1-100)")
         
         # Test 1: Play in CORRECT ascending order
-        print(f"   Testing CORRECT ascending order play...")
+        print("   Testing CORRECT ascending order play...")
         correct_order_passed = True
         
         # Sort all cards and play them in ascending order
@@ -501,9 +500,6 @@ def test_multiplayer_game_flow():
                 correct_order_passed = False
                 break
             
-            expected_status = "success" if i == len(sorted_cards) - 1 else "playing"
-            print(f"   ✓ Card {card_num} played -> {result.get('status')}")
-            
             # Verify state after each play
             for check_player in players:
                 success, check_state = get_game_state(lobby_code, check_player["cookie"])
@@ -521,7 +517,7 @@ def test_multiplayer_game_flow():
             all_passed = False
             continue
         
-        print(f"   ✓ Ascending order play passed")
+        print("   ✓ Ascending order play passed")
         
         # Level should be complete
         success, final_state = get_game_state(lobby_code, players[0]["cookie"])
@@ -532,7 +528,7 @@ def test_multiplayer_game_flow():
         
         print(f"   ✓ Level 1 complete after playing all {num_players} cards")
     
-    print_result("Multi-player game flow", all_passed, f"Tested 2-5 players")
+    print_result("Multi-player game flow", all_passed, "Tested 2-5 players")
     return all_passed
 
 
@@ -592,7 +588,7 @@ def test_wrong_card_failure():
             print(f"   ❌ Should have failed but got: {result.get('status')}")
             return False
     else:
-        print(f"   ❌ Not enough cards to test")
+        print("   ❌ Not enough cards to test")
         return False
     
     status = result.get("status")
@@ -612,7 +608,7 @@ def test_wrong_card_failure():
         
         # After failure, should be able to restart
         if state1_after.get("progression") and "restart" in state1_after.get("progression", {}).get("available_actions", []):
-            print(f"   ✓ Restart option available")
+            print("   ✓ Restart option available")
             
             # Test restart
             resp = requests.post(
@@ -623,14 +619,14 @@ def test_wrong_card_failure():
             restart_result = resp.json()
             
             if restart_result.get("status") == "playing" and restart_result.get("attempts", 0) > 1:
-                print(f"   ✓ Level restarted successfully")
+                print("   ✓ Level restarted successfully")
                 print_result("Wrong card failure", True, "Fail → Restart flow working")
                 return True
             else:
                 print(f"   ❌ Restart failed: {restart_result}")
                 return False
         else:
-            print(f"   ❌ Restart not available")
+            print("   ❌ Restart not available")
             return False
     else:
         print(f"   ❌ Should have failed but got status: {status}")
@@ -661,7 +657,7 @@ def test_state_consistency():
     # Start game
     start_game(lobby_code, players[0]["cookie"])
     
-    print(f"   ✓ 3 players in game")
+    print("   ✓ 3 players in game")
     
     # Get initial state for all
     initial_states = {}

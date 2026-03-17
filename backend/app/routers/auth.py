@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
-from starlette.config import Config
 from jose import jwt
 from datetime import datetime, timedelta
 
@@ -130,7 +129,6 @@ async def google_callback(request: Request, response: Response):
     frontend_url = f"{settings.frontend_url}{redirect_to}"
     
     # Create response with redirect and cookie
-    from fastapi.responses import RedirectResponse
     
     # Set cookie on a response first, then redirect
     response = RedirectResponse(url=frontend_url, status_code=302)

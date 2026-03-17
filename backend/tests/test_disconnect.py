@@ -26,7 +26,7 @@ def test_game_static_ignores_disconnected():
     
     result = game.start_game({'deck_size': 100, 'timing_mode': 'relaxed'})
     
-    print(f"Initial hands:")
+    print("Initial hands:")
     print(f"  P1: {game.player_hands['p1'].cards}")
     print(f"  P2: {game.player_hands['p2'].cards}")
     
@@ -43,10 +43,10 @@ def test_game_static_ignores_disconnected():
     
     # Disconnect the player with minimum card
     if min_player == 'p2':
-        print(f"\n⚠️  P2 (Bob) has minimum card but disconnects!")
+        print("\n⚠️  P2 (Bob) has minimum card but disconnects!")
         
         game.handle_player_disconnect('p2')
-        print(f"   P2 marked as disconnected")
+        print("   P2 marked as disconnected")
         
         # next_expected should STILL be P2's card (static game logic)
         state = game.get_public_state()
@@ -54,13 +54,13 @@ def test_game_static_ignores_disconnected():
         
         # Verify next_expected is still P2's minimum card
         if state.get('next_expected') == min_card:
-            print(f"   ✅ PASS - Game is static, next_expected unchanged!")
+            print("   ✅ PASS - Game is static, next_expected unchanged!")
             return True
         else:
-            print(f"   ❌ FAIL - next_expected changed!")
+            print("   ❌ FAIL - next_expected changed!")
             return False
     else:
-        print(f"\n✓ P1 has minimum card, plays it...")
+        print("\n✓ P1 has minimum card, plays it...")
         result = game.handle_action('p1', 'play', {'card': min_card})
         print(f"   Status: {result.get('status')}")
         return True
@@ -107,7 +107,7 @@ def test_other_players_can_continue():
         print(f"   Result status: {result.get('status')}")
         
         if result.get('status') == 'playing':
-            print(f"   ✅ PASS - Game continued with connected player's card!")
+            print("   ✅ PASS - Game continued with connected player's card!")
             return True
         else:
             print(f"   ❌ FAIL - Game blocked: {result}")
@@ -155,7 +155,7 @@ def test_play_card_after_opponent_disconnect():
             assert 'error' in result, "Should fail when trying to play non-minimum card"
             assert result.get('status') == 'failed', "Game should fail when wrong card played"
     
-    print(f"✅ PASS - Correctly waits for disconnected player's minimum card")
+    print("✅ PASS - Correctly waits for disconnected player's minimum card")
 
 
 def test_reconnect_gets_current_game_state():
@@ -181,18 +181,18 @@ def test_reconnect_gets_current_game_state():
         if game.status.value == 'playing':
             game.handle_action(pid, 'play', {'card': card})
     
-    print(f"Game state after some plays:")
+    print("Game state after some plays:")
     print(f"  Played cards: {game.played_cards}")
     print(f"  Status: {game.status.value}")
     
     # Disconnect and reconnect P1
-    print(f"\n📡 P1 disconnects and reconnects...")
+    print("\n📡 P1 disconnects and reconnects...")
     game.handle_player_disconnect('p1')
     game.handle_player_reconnect('p1')
     
     state = game.get_player_state('p1')
     
-    print(f"   P1 receives state:")
+    print("   P1 receives state:")
     print(f"   - My hand: {state.get('my_hand', {}).get('cards')}")
     print(f"   - Played: {state.get('played_cards')}")
     print(f"   - Next expected: {state.get('next_expected')}")
@@ -202,10 +202,10 @@ def test_reconnect_gets_current_game_state():
     has_played_cards = len(state.get('played_cards', [])) > 0
     
     if has_correct_hand and has_played_cards:
-        print(f"\n   ✅ PASS - P1 restored to current game state!")
+        print("\n   ✅ PASS - P1 restored to current game state!")
         return True
     else:
-        print(f"\n   ❌ FAIL - P1 did not receive correct state!")
+        print("\n   ❌ FAIL - P1 did not receive correct state!")
         return False
 
 
@@ -239,10 +239,10 @@ def test_disconnected_player_tracked_but_game_static():
     print(f"   Disconnected players: {game.disconnected_players}")
     
     if initial_min == new_min:
-        print(f"\n   ✅ PASS - Game is static, next_expected unchanged!")
+        print("\n   ✅ PASS - Game is static, next_expected unchanged!")
         return True
     else:
-        print(f"\n   ❌ FAIL - Game logic changed based on connection!")
+        print("\n   ❌ FAIL - Game logic changed based on connection!")
         return False
 
 
