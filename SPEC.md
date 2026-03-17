@@ -525,6 +525,31 @@
 
 **Note**: If `group_name` already exists, the score and games_played will be added to the existing entry.
 
+#### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/google/login` | Initiate Google OAuth login flow |
+| GET | `/api/auth/google/callback` | OAuth callback (handled by backend) |
+| GET | `/api/auth/me` | Get current authenticated user info |
+| POST | `/api/auth/logout` | Logout user and clear session |
+
+**GET /api/auth/me** Response:
+```json
+{
+  "user_id": "integer",
+  "google_id": "string",
+  "email": "string",
+  "name": "string",
+  "avatar_url": "string | null"
+}
+```
+
+**Features**:
+- JWT tokens stored in HTTP-only cookies (7-day expiry)
+- Avatar support with fallback to database lookup for old tokens
+- Automatic name pre-fill in lobby forms when authenticated
+- Logout clears cookie and redirects to home
+
 ### WebSocket Endpoints
 
 | Endpoint | Description |
@@ -638,6 +663,19 @@
 | games_played | INTEGER | Number of games completed |
 | updated_at | TIMESTAMP | Last update time (auto-updates) |
 
+### Table: users
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key, auto-increment |
+| google_id | VARCHAR(255) | Google OAuth ID (unique, indexed) |
+| email | VARCHAR(255) | User email (unique, indexed) |
+| name | VARCHAR(255) | Display name from Google |
+| avatar_url | VARCHAR(500) | Google profile image URL |
+| is_active | BOOLEAN | Account status (default: true) |
+| created_at | TIMESTAMP | Account creation time |
+| updated_at | TIMESTAMP | Last update time (auto-updates) |
+
 ---
 
 ## Local Development
@@ -744,23 +782,29 @@ frontend/src/
 │   │   ├── input.tsx            # Text input
 │   │   ├── card.tsx             # Card container
 │   │   └── alert.tsx            # Alert/Error messages
+│   ├── auth/                    # Authentication components
+│   │   └── GoogleAuth.tsx       # Google login button + user info
 │   ├── layout/                  # Layout components
 │   │   ├── MainLayout.tsx       # App shell with navbar
-│   │   └── Navbar.tsx           # Top navigation + theme toggle
+│   │   └── Navbar.tsx           # Top navigation + auth + theme toggle
 │   └── lobby/                   # Lobby-specific components
 │       ├── JoinLobbyForm.tsx    # Name input form (join/create)
 │       ├── PlayerList.tsx       # Display players with host badges
-│       └── LobbyChat.tsx        # Real-time chat interface
+│       ├── LobbyChat.tsx        # Real-time chat interface
+│       └── LobbyCodeInput.tsx   # Lobby code entry with validation
+├── contexts/
+│   └── AuthContext.tsx          # Global auth state management
 ├── pages/
 │   ├── HomePage.tsx             # Landing with New/Join Game options
 │   ├── LeaderboardPage.tsx      # High scores display
 │   └── LobbyPage.tsx            # Main game lobby (composite of components)
 ├── hooks/
+│   ├── useAuth.ts               # Auth hook (exports from AuthContext)
 │   ├── useTheme.ts              # Dark mode management
 │   └── lobby/
 │       └── useLobby.ts          # Main lobby state + WebSocket hook
 ├── types/
-│   └── lobby.ts                 # TypeScript types (Player, Lobby, ChatMessage)
+│   └── lobby.ts                 # TypeScript types (Player, Lobby, ChatMessage, User)
 ├── lib/
 │   └── utils.ts                 # cn() helper for Tailwind classes
 ├── App.tsx                      # Router configuration
@@ -772,11 +816,15 @@ frontend/src/
 backend/
 ├── app/
 │   ├── main.py                  # FastAPI app factory + WebSocket endpoint
-│   ├── models.py                # SQLAlchemy DB models (Counter, Leaderboard)
+│   ├── models.py                # SQLAlchemy DB models (Counter, Leaderboard, User)
+│   ├── config.py                # Application configuration + settings
 │   ├── database.py              # Async PostgreSQL connection
 │   ├── lobby_manager.py         # In-memory lobby + player + chat management
 │   ├── websocket.py             # WebSocket connection manager (room-based)
+│   ├── services/
+│   │   └── user_service.py      # User CRUD operations
 │   └── routers/
+│       ├── auth.py              # Google OAuth endpoints
 │       ├── counter.py           # Demo counter API
 │       ├── leaderboard.py       # Leaderboard CRUD
 │       └── lobbies.py          # Lobby HTTP API + chat endpoints
@@ -790,7 +838,10 @@ backend/
 
 | File | Purpose |
 |------|---------|
+| `frontend/src/contexts/AuthContext.tsx` | Global auth state management |
 | `frontend/src/hooks/lobby/useLobby.ts` | Main hook managing lobby state, WebSocket, HTTP API |
+| `backend/app/routers/auth.py` | Google OAuth + JWT token management |
+| `backend/app/services/user_service.py` | User database operations |
 | `backend/app/lobby_manager.py` | In-memory data structures (Lobby, Player, ChatMessage classes) |
 | `backend/app/routers/lobbies.py` | HTTP endpoints for lobby CRUD + chat |
 | `backend/app/main.py` | WebSocket endpoint + HTTP-to-WS broadcast bridge |
@@ -821,10 +872,14 @@ backend/
 ## Environment Variables
 
 ### Backend
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `SECRET_KEY` | Application secret key |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `SECRET_KEY` | Application secret key for JWT signing | Yes |
+| `GOOGLE_CLIENT_ID` | Google OAuth Client ID | Yes (for auth) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | Yes (for auth) |
+| `FRONTEND_URL` | Frontend URL for OAuth redirects | Yes (default: http://localhost:5173) |
+| `ENVIRONMENT` | Environment name (development/production) | No (default: development) |
 
 ### Frontend
 | Variable | Description |
@@ -844,9 +899,14 @@ backend/
 
 ## Future Enhancements
 
-- User authentication (OAuth2/JWT)
+### Completed ✅
+- **User authentication**: Google OAuth with JWT tokens, avatar support, persistent sessions
+
+### Planned
 - Real-time game state synchronization via WebSockets
 - Game logic implementation (card dealing, turns, scoring)
 - Lobby management (player join/leave, game start)
 - Advanced leaderboard features (filters, time ranges)
 - Monitoring and logging (Cloud Monitoring, Cloud Logging)
+- User profiles with editable display names and avatars
+- Friends system and invite functionality
