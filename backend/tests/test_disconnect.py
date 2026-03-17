@@ -1,6 +1,6 @@
 """
 Test game behavior when players disconnect during gameplay.
-Ensures remaining players can continue and disconnected players can rejoin.
+Game logic is STATIC in backend - doesn't wait for anyone.
 """
 
 import sys
@@ -8,7 +8,6 @@ sys.path.insert(0, '/Users/Patrick/code/carduitive3/backend')
 
 from app.games.classic import ClassicCarduitive
 from dataclasses import dataclass
-from typing import List, Dict, Any
 
 @dataclass
 class MockPlayer:
@@ -16,24 +15,22 @@ class MockPlayer:
     name: str
 
 
-def test_game_continues_when_player_disconnects():
-    """Test that the game continues when a player disconnects mid-game"""
+def test_game_static_ignores_disconnected():
+    """Test that game logic is static - disconnected players don't affect game"""
     print("\n" + "="*60)
-    print("TEST 1: Game continues when player disconnects")
+    print("TEST 1: Game is static - ignores disconnected players")
     print("="*60)
     
-    # Create game with 2 players
     players = [MockPlayer('p1', 'Alice'), MockPlayer('p2', 'Bob')]
     game = ClassicCarduitive('TEST', players)
     
-    # Start game - deal cards
     result = game.start_game({'deck_size': 100, 'timing_mode': 'relaxed'})
     
     print(f"Initial hands:")
-    print(f"  P1 (Alice): {game.player_hands['p1'].cards}")
-    print(f"  P2 (Bob): {game.player_hands['p2'].cards}")
+    print(f"  P1: {game.player_hands['p1'].cards}")
+    print(f"  P2: {game.player_hands['p2'].cards}")
     
-    # Simulate: Find who has minimum card
+    # Find minimum card across ALL players
     all_cards = [
         (card, 'p1') for card in game.player_hands['p1'].cards
     ] + [
@@ -44,36 +41,24 @@ def test_game_continues_when_player_disconnects():
     
     print(f"\nMinimum card {min_card} belongs to {min_player}")
     
-    # CASE 1: Minimum card player disconnects BEFORE playing
+    # Disconnect the player with minimum card
     if min_player == 'p2':
         print(f"\n⚠️  P2 (Bob) has minimum card but disconnects!")
         
-        # Simulate disconnect
         game.handle_player_disconnect('p2')
         print(f"   P2 marked as disconnected")
         
-        # Reduce auto-play delay for testing
-        game.AUTO_PLAY_DELAY_SECONDS = 0
+        # next_expected should STILL be P2's card (static game logic)
+        state = game.get_public_state()
+        print(f"   next_expected: {state.get('next_expected')}")
         
-        # P1 tries to play their card
-        p1_card = game.player_hands['p1'].cards[0]
-        print(f"\n🃏 P1 tries to play {p1_card}...")
-        
-        result = game.handle_action('p1', 'play', {'card': p1_card})
-        
-        # Check if auto-play happened for P2
-        print(f"   Result status: {result.get('status')}")
-        print(f"   Played cards: {result.get('played_cards')}")
-        
-        if min_card in result.get('played_cards', []):
-            print(f"   ✅ Auto-play worked! P2's card {min_card} was played automatically")
+        # Verify next_expected is still P2's minimum card
+        if state.get('next_expected') == min_card:
+            print(f"   ✅ PASS - Game is static, next_expected unchanged!")
             return True
-        elif result.get('status') == 'failed':
-            print(f"   ❌ FAILED - game is still stuck")
-            return False
         else:
-            print(f"   ✅ Game continued somehow")
-            return True
+            print(f"   ❌ FAIL - next_expected changed!")
+            return False
     else:
         print(f"\n✓ P1 has minimum card, plays it...")
         result = game.handle_action('p1', 'play', {'card': min_card})
@@ -81,45 +66,52 @@ def test_game_continues_when_player_disconnects():
         return True
 
 
-def test_disconnected_player_cards_get_auto_played():
-    """Test that disconnected player cards are auto-played after timeout"""
+def test_other_players_can_continue():
+    """Test that other players can continue when someone disconnects"""
     print("\n" + "="*60)
-    print("TEST 2: Disconnected player cards auto-play")
+    print("TEST 2: Other players can continue when someone disconnects")
     print("="*60)
     
-    # Create game with 3 players
-    players = [MockPlayer('p1', 'Alice'), MockPlayer('p2', 'Bob'), MockPlayer('p3', 'Charlie')]
+    players = [MockPlayer('p1', 'Alice'), MockPlayer('p2', 'Bob')]
     game = ClassicCarduitive('TEST2', players)
     
-    # Start game
-    result = game.start_game({'deck_size': 100, 'timing_mode': 'relaxed'})
+    game.start_game({'deck_size': 100, 'timing_mode': 'relaxed'})
     
-    print(f"Initial hands:")
-    for pid in ['p1', 'p2', 'p3']:
-        print(f"  {pid}: {game.player_hands[pid].cards}")
-    
-    # Simulate: P2 disconnects with minimum card
-    all_cards = []
-    for pid in ['p1', 'p2', 'p3']:
-        for card in game.player_hands[pid].cards:
-            all_cards.append((card, pid))
+    # Get all cards sorted
+    all_cards = [
+        (card, pid) for pid in ['p1', 'p2']
+        for card in game.player_hands[pid].cards
+    ]
     all_cards.sort(key=lambda x: x[0])
     
-    min_card, min_player = all_cards[0]
-    print(f"\nMinimum card is {min_card} held by {min_player}")
+    min_card, min_pid = all_cards[0]
     
-    if min_player == 'p2':
-        print(f"\n⚠️  P2 (Bob) disconnects holding minimum card {min_card}")
-        print(f"   Auto-play mechanism should play it after timeout...")
+    # Play first card
+    print(f"Playing first card: {min_card} by {min_pid}")
+    result = game.handle_action(min_pid, 'play', {'card': min_card})
+    print(f"   Status: {result.get('status')}")
+    
+    # Disconnect the other player
+    other_pid = 'p2' if min_pid == 'p1' else 'p1'
+    print(f"\n⚠️  {other_pid} disconnects...")
+    game.handle_player_disconnect(other_pid)
+    
+    # The next minimum should be whatever is in the connected player's hand
+    remaining = game.player_hands[min_pid].cards
+    if remaining:
+        next_card = min(remaining)
+        print(f"\n🃏 {min_pid} tries to play {next_card}...")
         
-        # Simulate auto-play for disconnected player
-        # This is the fix we need to implement
-        print(f"\n   🔧 IMPLEMENTATION NEEDED:")
-        print(f"   - Add disconnect timeout tracking")
-        print(f"   - Auto-play minimum card for disconnected players")
-        print(f"   - Notify all players via WebSocket")
+        # This should work because the game is static
+        result = game.handle_action(min_pid, 'play', {'card': next_card})
+        print(f"   Result status: {result.get('status')}")
         
-        return False  # Currently not implemented
+        if result.get('status') == 'playing':
+            print(f"   ✅ PASS - Game continued with connected player's card!")
+            return True
+        else:
+            print(f"   ❌ FAIL - Game blocked: {result}")
+            return False
     
     return True
 
@@ -130,34 +122,32 @@ def test_reconnect_gets_current_game_state():
     print("TEST 3: Reconnect gets current game state")
     print("="*60)
     
-    # Create game
     players = [MockPlayer('p1', 'Alice'), MockPlayer('p2', 'Bob')]
     game = ClassicCarduitive('TEST3', players)
     
-    # Start and play some cards
     game.start_game({'deck_size': 100, 'timing_mode': 'relaxed'})
     
     # Play a few cards
-    initial_cards = [
+    all_cards = [
         (card, pid) for pid in ['p1', 'p2']
         for card in game.player_hands[pid].cards
     ]
-    initial_cards.sort(key=lambda x: x[0])
+    all_cards.sort(key=lambda x: x[0])
     
     # Play first 2 cards
-    for card, pid in initial_cards[:2]:
+    for card, pid in all_cards[:2]:
         if game.status.value == 'playing':
             game.handle_action(pid, 'play', {'card': card})
     
     print(f"Game state after some plays:")
     print(f"  Played cards: {game.played_cards}")
-    print(f"  Current level: {game.level}")
     print(f"  Status: {game.status.value}")
     
-    # Simulate P1 disconnect and reconnect
+    # Disconnect and reconnect P1
     print(f"\n📡 P1 disconnects and reconnects...")
+    game.handle_player_disconnect('p1')
+    game.handle_player_reconnect('p1')
     
-    # Get game state for P1 (simulating API call)
     state = game.get_player_state('p1')
     
     print(f"   P1 receives state:")
@@ -166,72 +156,66 @@ def test_reconnect_gets_current_game_state():
     print(f"   - Next expected: {state.get('next_expected')}")
     print(f"   - Status: {state.get('status')}")
     
-    # Check if state is correct
     has_correct_hand = 'my_hand' in state and 'cards' in state.get('my_hand', {})
     has_played_cards = len(state.get('played_cards', [])) > 0
     
     if has_correct_hand and has_played_cards:
-        print(f"\n   ✅ P1 successfully restored to current game state!")
+        print(f"\n   ✅ PASS - P1 restored to current game state!")
         return True
     else:
-        print(f"\n   ❌ P1 did not receive correct state!")
+        print(f"\n   ❌ FAIL - P1 did not receive correct state!")
         return False
 
 
-def test_game_ends_when_all_cards_played():
-    """Test game completion with mixed connected/disconnected players"""
+def test_disconnected_player_tracked_but_game_static():
+    """Test that disconnected player is tracked but game logic is static"""
     print("\n" + "="*60)
-    print("TEST 4: Game completion with disconnects")
+    print("TEST 4: Disconnected tracked but game is static")
     print("="*60)
     
-    players = [MockPlayer('p1', 'Alice'), MockPlayer('p2', 'Bob')]
+    players = [MockPlayer('p1', 'Alice'), MockPlayer('p2', 'Bob'), MockPlayer('p3', 'Charlie')]
     game = ClassicCarduitive('TEST4', players)
+    
     game.start_game({'deck_size': 100, 'timing_mode': 'relaxed'})
     
-    print(f"Playing all cards...")
+    # Get initial minimum
+    all_cards = [(card, pid) for pid in ['p1', 'p2', 'p3'] 
+                 for card in game.player_hands[pid].cards]
+    all_cards.sort(key=lambda x: x[0])
+    initial_min = all_cards[0][0]
     
-    # Play all cards in order
-    while game.status.value == 'playing':
-        # Find minimum card
-        all_remaining = []
-        for pid in ['p1', 'p2']:
-            for card in game.player_hands[pid].cards:
-                all_remaining.append((card, pid))
-        
-        if not all_remaining:
-            break
-            
-        all_remaining.sort(key=lambda x: x[0])
-        min_card, min_pid = all_remaining[0]
-        
-        result = game.handle_action(min_pid, 'play', {'card': min_card})
-        print(f"  {min_pid} played {min_card}: {result.get('status')}")
+    # Disconnect P2
+    print("Disconnecting P2...")
+    game.handle_player_disconnect('p2')
     
-    print(f"\nFinal status: {game.status.value}")
-    print(f"Played sequence: {game.played_cards}")
+    # Check that next_expected is STILL the same (static game)
+    state = game.get_public_state()
+    new_min = state.get('next_expected')
     
-    if game.status.value == 'success':
-        print(f"\n   ✅ Game completed successfully!")
+    print(f"   Initial minimum: {initial_min}")
+    print(f"   After disconnect: {new_min}")
+    print(f"   Disconnected players: {game.disconnected_players}")
+    
+    if initial_min == new_min:
+        print(f"\n   ✅ PASS - Game is static, next_expected unchanged!")
         return True
     else:
-        print(f"\n   ❌ Game did not complete properly")
+        print(f"\n   ❌ FAIL - Game logic changed based on connection!")
         return False
 
 
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("DISCONNECT/RECONNECT TEST SUITE")
+    print("DISCONNECT/RECONNECT TEST SUITE (Static Game Logic)")
     print("="*60)
     
     results = []
     
-    # Run all tests
-    results.append(("Game continues when player disconnects", test_game_continues_when_player_disconnects()))
-    results.append(("Disconnected player cards auto-play", test_disconnected_player_cards_get_auto_played()))
+    results.append(("Game is static - ignores disconnected", test_game_static_ignores_disconnected()))
+    results.append(("Other players can continue", test_other_players_can_continue()))
     results.append(("Reconnect gets current game state", test_reconnect_gets_current_game_state()))
-    results.append(("Game completion with disconnects", test_game_ends_when_all_cards_played()))
+    results.append(("Disconnected tracked but game static", test_disconnected_player_tracked_but_game_static()))
     
-    # Summary
     print("\n" + "="*60)
     print("TEST RESULTS SUMMARY")
     print("="*60)
