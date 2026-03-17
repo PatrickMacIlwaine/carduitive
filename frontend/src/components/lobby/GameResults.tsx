@@ -32,6 +32,7 @@ interface PlayerCardRowProps {
   playerName: string
   cardsPlayed: number[]
   remainingCards: number[]
+  remainingCount: number
   isCurrentPlayer: boolean
   isHost?: boolean
 }
@@ -39,7 +40,8 @@ interface PlayerCardRowProps {
 function PlayerCardRow({ 
   playerName, 
   cardsPlayed, 
-  remainingCards, 
+  remainingCards,
+  remainingCount,
   isCurrentPlayer,
   isHost 
 }: PlayerCardRowProps) {
@@ -77,7 +79,7 @@ function PlayerCardRow({
         )}
       </div>
       
-      {remainingCards.length > 0 && (
+      {remainingCards.length > 0 ? (
         <>
           <div className="text-muted-foreground">→</div>
           <div className="flex flex-wrap gap-1">
@@ -91,10 +93,17 @@ function PlayerCardRow({
             ))}
           </div>
         </>
-      )}
+      ) : remainingCount > 0 ? (
+        <>
+          <div className="text-muted-foreground">→</div>
+          <div className="text-sm text-muted-foreground">
+            {remainingCount} card{remainingCount !== 1 ? 's' : ''} remaining
+          </div>
+        </>
+      ) : null}
       
       <div className="w-16 text-right text-sm text-muted-foreground">
-        {cardsPlayed.length + remainingCards.length} total
+        {cardsPlayed.length + (remainingCards.length || remainingCount)} total
       </div>
     </motion.div>
   )
@@ -144,12 +153,7 @@ export function GameResults({
             const handInfo = player_hands[player.id] || { card_count: 0, cards_played: [] }
             const isCurrentPlayer = player.id === currentPlayerId
             
-            let remainingCards: number[] = []
-            if (isCurrentPlayer && my_hand) {
-              remainingCards = my_hand.cards
-            } else {
-              remainingCards = new Array(handInfo.card_count).fill(0).map((_, i) => i + 1)
-            }
+            const remainingCards = isCurrentPlayer && my_hand ? my_hand.cards : []
             
             return (
               <motion.div
@@ -162,6 +166,7 @@ export function GameResults({
                   playerName={player.name}
                   cardsPlayed={handInfo.cards_played}
                   remainingCards={remainingCards}
+                  remainingCount={handInfo.card_count}
                   isCurrentPlayer={isCurrentPlayer}
                   isHost={player.is_host}
                 />

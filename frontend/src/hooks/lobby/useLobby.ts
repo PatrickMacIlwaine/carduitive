@@ -127,12 +127,16 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
             
           case 'lobby_update':
             if (message.data && 'players' in message.data) {
-              // Merge lobby update while preserving 'you' (current player identity)
+              // Merge lobby update while preserving 'you' (current player identity) and my_hand
               setLobby(prev => {
                 const updatedLobby = message.data as Lobby
                 return {
                   ...updatedLobby,
-                  you: prev?.you  // Preserve current player's identity
+                  you: prev?.you,  // Preserve current player's identity
+                  game_state: prev?.game_state ? {
+                    ...updatedLobby.game_state,
+                    my_hand: prev.game_state.my_hand  // Preserve my private hand
+                  } : updatedLobby.game_state
                 }
               })
             }
@@ -141,13 +145,29 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
           case 'game_update':
             // Update game state from other players' moves
             if (message.data) {
+              const gameData = message.data as any
+              
               setLobby(prev => {
                 if (!prev) return prev
+                const prevPlayedCount = prev.game_state?.played_cards?.length || 0
+                const newPlayedCount = gameData.played_cards?.length || 0
+                
+                // If more cards were played (by others), fetch fresh data to sync
+                // Otherwise just update with preserved my_hand
+                if (newPlayedCount > prevPlayedCount) {
+                  // Schedule fetch after this state update
+                  setTimeout(() => fetchLobby(), 0)
+                  return {
+                    ...prev,
+                    game_state: gameData
+                  }
+                }
+                
                 return {
                   ...prev,
                   game_state: {
-                    ...message.data as Lobby['game_state'],
-                    my_hand: prev.game_state?.my_hand  // Preserve my private hand
+                    ...gameData,
+                    my_hand: prev.game_state?.my_hand
                   }
                 }
               })
@@ -492,7 +512,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
       const data = await res.json()
       console.log('Play card result:', data)
       
-      // Update lobby with new game state
+      // Update lobby with new game state (server returns my_hand in response)
       setLobby(prev => {
         if (!prev) return prev
         return {
@@ -527,7 +547,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
       const data = await res.json()
       console.log('Advance result:', data)
       
-      // Update lobby with new game state
+      // Update lobby with new game state (server returns my_hand in response)
       setLobby(prev => {
         if (!prev) return prev
         return {
@@ -563,7 +583,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
       const data = await res.json()
       console.log('Restart result:', data)
       
-      // Update lobby with new game state
+      // Update lobby with new game state (server returns my_hand in response)
       setLobby(prev => {
         if (!prev) return prev
         return {
