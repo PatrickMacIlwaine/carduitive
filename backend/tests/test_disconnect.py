@@ -116,6 +116,48 @@ def test_other_players_can_continue():
     return True
 
 
+def test_play_card_after_opponent_disconnect():
+    """Test that a player can play cards after opponent disconnects but must wait for their minimum card"""
+    players = [MockPlayer('p1', 'Alice'), MockPlayer('p2', 'Bob')]
+    game = ClassicCarduitive('TEST_DISCONNECT_FIX', players)
+    
+    game.start_game({'deck_size': 100, 'timing_mode': 'relaxed'})
+    
+    all_cards = [
+        (card, pid) for pid in ['p1', 'p2']
+        for card in game.player_hands[pid].cards
+    ]
+    all_cards.sort(key=lambda x: x[0])
+    
+    first_card, first_pid = all_cards[0]
+    second_card, second_pid = all_cards[1]
+    
+    game.handle_action(first_pid, 'play', {'card': first_card})
+    
+    other_pid = 'p2' if first_pid == 'p1' else 'p1'
+    game.handle_player_disconnect(other_pid)
+    
+    # If connected player has the minimum card, they can play
+    remaining = game.player_hands[first_pid].cards
+    if remaining:
+        next_card = min(remaining)
+        next_expected = min(
+            card for pid, hand in game.player_hands.items()
+            for card in hand.cards
+        )
+        
+        if next_card == next_expected:
+            result = game.handle_action(first_pid, 'play', {'card': next_card})
+            assert 'error' not in result, f"Should be able to play minimum card: {result}"
+            assert result.get('status') == 'playing', f"Game should continue: {result}"
+        else:
+            result = game.handle_action(first_pid, 'play', {'card': next_card})
+            assert 'error' in result, "Should fail when trying to play non-minimum card"
+            assert result.get('status') == 'failed', "Game should fail when wrong card played"
+    
+    print(f"✅ PASS - Correctly waits for disconnected player's minimum card")
+
+
 def test_reconnect_gets_current_game_state():
     """Test that reconnected player gets current game state"""
     print("\n" + "="*60)
@@ -213,6 +255,7 @@ if __name__ == "__main__":
     
     results.append(("Game is static - ignores disconnected", test_game_static_ignores_disconnected()))
     results.append(("Other players can continue", test_other_players_can_continue()))
+    results.append(("Play card after opponent disconnect", test_play_card_after_opponent_disconnect() or True))
     results.append(("Reconnect gets current game state", test_reconnect_gets_current_game_state()))
     results.append(("Disconnected tracked but game static", test_disconnected_player_tracked_but_game_static()))
     
