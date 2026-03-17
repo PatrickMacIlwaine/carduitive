@@ -152,10 +152,6 @@ class ClassicCarduitive(Game):
         - 'advance': Advance to next level (after success)
         - 'restart': Restart current level (after failure)
         """
-        # Check if we should auto-play for disconnected players before processing
-        if self.status == GameStatus.PLAYING and self.disconnected_players:
-            self._auto_play_disconnected_cards()
-        
         # Check if this is a progression action
         if action == "advance":
             return self._handle_advance()
@@ -240,7 +236,7 @@ class ClassicCarduitive(Game):
             "cards_remaining": hand.card_count
         })
         
-        # Check if level complete
+        # Check if level complete (wait for disconnected players to return)
         total_cards_remaining = sum(
             h.card_count for h in self.player_hands.values()
         )
