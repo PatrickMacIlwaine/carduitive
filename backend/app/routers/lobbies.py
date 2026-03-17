@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException, Cookie, Response, Request
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import json
+import asyncio
+from datetime import datetime
 from jose import jwt
 
 from app.lobby_manager import lobby_manager
@@ -58,6 +60,16 @@ class ChatMessageRequest(BaseModel):
     message: str
 
 
+class StartGameRequest(BaseModel):
+    game_type: str = "classic"
+    config: Dict[str, Any] = {}
+
+
+class GameActionRequest(BaseModel):
+    action: str  # 'play', 'pass', etc.
+    data: Dict[str, Any] = {}
+
+
 class ChatMessageResponse(BaseModel):
     id: str
     player_name: str
@@ -74,6 +86,10 @@ class LobbyResponse(BaseModel):
     players: list
     you: Optional[dict] = None
     messages: Optional[List[ChatMessageResponse]] = None
+    game_state: Optional[Dict[str, Any]] = None
+    current_level: Optional[int] = None
+    countdown: Optional[int] = None
+    game_type: Optional[str] = None
 
 
 @router.post("", response_model=LobbyResponse)
@@ -112,7 +128,10 @@ async def create_lobby(
         samesite="lax"
     )
     
-    lobby_dict = lobby.to_dict()
+    # Mark player as connected in WebSocket manager immediately (BEFORE to_dict)
+    lobby_manager_ws.connected_players.setdefault(request.code, set()).add(player.id)
+    
+    lobby_dict = lobby.to_dict(player_id=player.id)
     lobby_dict["you"] = build_you_dict(player)
     
     return lobby_dict
@@ -132,7 +151,14 @@ async def get_lobby(
     cookie_name = f"lobby_{code}"
     lobby_session = request.cookies.get(cookie_name)
     
-    lobby_dict = lobby.to_dict()
+    # If user has a session, identify them and include their game state
+    player_id = None
+    if lobby_session:
+        player = lobby.get_player_by_session(lobby_session)
+        if player:
+            player_id = player.id
+    
+    lobby_dict = lobby.to_dict(player_id=player_id)
     
     # If user has a session, identify them
     if lobby_session:
@@ -166,8 +192,11 @@ async def join_lobby(
     if lobby_session:
         player = lobby_manager.get_player_by_session(code, lobby_session)
         if player:
+            # Mark player as connected on re-join (BEFORE to_dict)
+            lobby_manager_ws.connected_players.setdefault(code, set()).add(player.id)
+            
             # Player exists with this session - allow re-join
-            lobby_dict = lobby.to_dict()
+            lobby_dict = lobby.to_dict(player_id=player.id)
             lobby_dict["you"] = build_you_dict(player)
             # Include recent messages
             recent_messages = lobby.get_messages(50)
@@ -182,6 +211,7 @@ async def join_lobby(
                 }
                 for msg in recent_messages
             ]
+            
             return lobby_dict
     
     # Check if name is taken by another player
@@ -212,6 +242,9 @@ async def join_lobby(
     # Add system message about player joining
     lobby.add_message("System", "system", f"{player.name} joined the lobby", "system")
     
+    # Mark player as connected FIRST (before broadcasting)
+    lobby_manager_ws.connected_players.setdefault(code, set()).add(player.id)
+    
     # Broadcast updated lobby state to all connected WebSocket clients
     import asyncio
     asyncio.create_task(
@@ -233,7 +266,7 @@ async def join_lobby(
         samesite="lax"
     )
     
-    lobby_dict = lobby.to_dict()
+    lobby_dict = lobby.to_dict(player_id=player.id)
     lobby_dict["you"] = build_you_dict(player)
     # Include recent messages for the joining player
     recent_messages = lobby.get_messages(50)
@@ -337,6 +370,10 @@ async def leave_lobby(
             lobby.add_message("System", "system", f"{player.name} left the lobby", "system")
             lobby_manager.leave_lobby(code, player.id)
             
+            # Remove from connected players
+            if code in lobby_manager_ws.connected_players:
+                lobby_manager_ws.connected_players[code].discard(player.id)
+            
             # Broadcast updated lobby state to all connected WebSocket clients
             import asyncio
             asyncio.create_task(
@@ -376,3 +413,200 @@ async def delete_lobby(
     
     lobby_manager.delete_lobby(code)
     return {"message": "Lobby deleted successfully"}
+
+
+@router.post("/{code}/start")
+async def start_game(
+    code: str,
+    request: StartGameRequest,
+    http_request: Request
+):
+    """Start a game in the lobby (host only) with 3-2-1 countdown."""
+    # Get session cookie dynamically
+    cookie_name = f"lobby_{code}"
+    lobby_session = http_request.cookies.get(cookie_name)
+    
+    lobby = lobby_manager.get_lobby(code)
+    if not lobby:
+        raise HTTPException(status_code=404, detail="Lobby not found")
+    
+    # Verify host
+    if not lobby_session:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    
+    player = lobby.get_player_by_session(lobby_session)
+    if not player or not player.is_host:
+        raise HTTPException(status_code=403, detail="Only host can start game")
+    
+    # Start countdown before actual game start
+    lobby.status = "starting"
+    
+    # Countdown: 3, 2, 1
+    for count in [3, 2, 1]:
+        lobby.countdown = count
+        lobby.updated_at = datetime.now()
+        
+        # Broadcast countdown to all players
+        import asyncio
+        asyncio.create_task(
+            lobby_manager_ws.broadcast_to_lobby(
+                json.dumps({
+                    "type": "countdown",
+                    "data": {
+                        "count": count,
+                        "message": f"Game starting in {count}..."
+                    }
+                }),
+                code
+            )
+        )
+        
+        # Wait 1 second between counts
+        await asyncio.sleep(1)
+    
+    # Clear countdown
+    lobby.countdown = None
+    
+    # Now start the actual game
+    result = lobby_manager.start_game(code, request.game_type, request.config)
+    
+    if not result:
+        lobby.status = "waiting"
+        raise HTTPException(status_code=500, detail="Failed to start game")
+    
+    if "error" in result:
+        lobby.status = "waiting"
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    # Update lobby level tracking
+    lobby.current_level = 1
+    lobby.game_type = request.game_type
+    
+    # Add system message
+    lobby.add_message("System", "system", f"Game started! Level 1", "system")
+    
+    # Broadcast game started to all WebSocket clients
+    asyncio.create_task(
+        lobby_manager_ws.broadcast_to_lobby(
+            json.dumps({
+                "type": "game_started",
+                "data": {
+                    "game_type": request.game_type,
+                    "game_state": result,
+                    "lobby": lobby.to_dict(include_players=True)
+                }
+            }),
+            code
+        )
+    )
+    
+    # Return combined response with game state and lobby info
+    # Include player's private hand in the response
+    player_state = lobby.game.get_player_state(player.id) if lobby.game else None
+    
+    return {
+        **result,
+        "my_hand": player_state.get("my_hand") if player_state else None,
+        "current_level": lobby.current_level,
+        "countdown": lobby.countdown,
+        "lobby": lobby.to_dict(include_players=False)
+    }
+
+
+@router.post("/{code}/action")
+async def game_action(
+    code: str,
+    request: GameActionRequest,
+    http_request: Request
+):
+    """Perform a game action (play card, pass, etc.)."""
+    # Get session cookie dynamically
+    cookie_name = f"lobby_{code}"
+    lobby_session = http_request.cookies.get(cookie_name)
+    
+    lobby = lobby_manager.get_lobby(code)
+    if not lobby:
+        raise HTTPException(status_code=404, detail="Lobby not found")
+    
+    if not lobby_session:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    
+    player = lobby.get_player_by_session(lobby_session)
+    if not player:
+        raise HTTPException(status_code=403, detail="Player not found in lobby")
+    
+    # Handle the action
+    result = lobby_manager.handle_game_action(code, player.id, request.action, request.data)
+    
+    if not result:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    # Get player-specific state after action (includes private cards for restart/advance)
+    player_specific_state = lobby_manager.get_game_state(code, player.id)
+    if player_specific_state:
+        result = player_specific_state
+    
+    # Broadcast game state update
+    public_state = lobby_manager.get_game_state(code)
+    
+    # Determine message type based on action
+    if request.action in ["advance", "restart"]:
+        # For level transitions, tell all clients to fetch new state
+        message_type = "level_started"
+        broadcast_data = {
+            "type": message_type,
+            "data": {
+                "level": result.get("level"),
+                "status": result.get("status"),
+                "action": request.action,
+                "message": f"Level {result.get('level')} started!" if request.action == "advance" else f"Level {result.get('level')} restarted!"
+            }
+        }
+    else:
+        # Regular game update (play, pass, etc.)
+        message_type = "game_update"
+        broadcast_data = {
+            "type": message_type,
+            "data": public_state
+        }
+    
+    import asyncio
+    asyncio.create_task(
+        lobby_manager_ws.broadcast_to_lobby(
+            json.dumps(broadcast_data),
+            code
+        )
+    )
+    
+    return result
+
+
+@router.get("/{code}/game-state")
+async def get_game_state(
+    code: str,
+    http_request: Request
+):
+    """Get current game state (with player's private info)."""
+    # Get session cookie dynamically
+    cookie_name = f"lobby_{code}"
+    lobby_session = http_request.cookies.get(cookie_name)
+    
+    lobby = lobby_manager.get_lobby(code)
+    if not lobby:
+        raise HTTPException(status_code=404, detail="Lobby not found")
+    
+    player_id = None
+    if lobby_session:
+        player = lobby.get_player_by_session(lobby_session)
+        if player:
+            player_id = player.id
+    
+    state = lobby_manager.get_game_state(code, player_id)
+    
+    if not state:
+        raise HTTPException(status_code=404, detail="No game in progress")
+    
+    return state

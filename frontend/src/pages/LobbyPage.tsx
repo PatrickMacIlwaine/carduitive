@@ -6,6 +6,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { PlayerList } from '@/components/lobby/PlayerList'
 import { LobbyChat } from '@/components/lobby/LobbyChat'
 import { JoinLobbyForm } from '@/components/lobby/JoinLobbyForm'
+import { CountdownOverlay } from '@/components/lobby/CountdownOverlay'
+import { GameBoard } from '@/components/lobby/GameBoard'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 function LobbyHeader({ 
@@ -47,10 +49,16 @@ function LobbyHeader({
 
 function HostControls({ 
   isHost, 
-  playerCount 
+  playerCount,
+  connectedCount,
+  isStarting,
+  onStartGame
 }: { 
   isHost: boolean
   playerCount: number
+  connectedCount: number
+  isStarting: boolean
+  onStartGame: () => void
 }) {
   if (!isHost) {
     return (
@@ -63,6 +71,9 @@ function HostControls({
     )
   }
 
+  const allConnected = connectedCount === playerCount
+  const canStart = allConnected && !isStarting
+
   return (
     <Card>
       <CardHeader>
@@ -71,17 +82,25 @@ function HostControls({
           Host Controls
         </CardTitle>
         <CardDescription>
-          You are the host. Start the game when ready.
+          {allConnected 
+            ? "All players connected. Ready to start!" 
+            : `Waiting for ${playerCount - connectedCount} more player${playerCount - connectedCount === 1 ? '' : 's'} to connect...`}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Button 
           className="w-full" 
           size="lg"
-          disabled={playerCount < 1}
+          disabled={!canStart}
+          onClick={onStartGame}
         >
-          Start Game
+          {isStarting ? 'Starting...' : 'Start Game'}
         </Button>
+        {!allConnected && (
+          <p className="text-sm text-muted-foreground mt-2 text-center">
+            All players must be connected to start
+          </p>
+        )}
       </CardContent>
     </Card>
   )
@@ -99,10 +118,16 @@ export function LobbyPage() {
     error,
     wsConnected,
     messages,
+    countdown,
+    isStarting,
     joinLobby,
     createLobby,
     leaveLobby,
-    sendChatMessage
+    sendChatMessage,
+    startGame,
+    playCard,
+    advanceLevel,
+    restartLevel
   } = useLobby(code)
 
   const isNewLobby = !loading && !lobby && !error
@@ -131,9 +156,18 @@ export function LobbyPage() {
     )
   }
 
-  // Show lobby interface
+  // Show lobby interface or game board
+  const connectedCount = lobby.players.filter(p => p.is_connected).length
+  const isPlaying = lobby.status === 'playing' && lobby.game_state
+  
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {/* Countdown Overlay */}
+      <CountdownOverlay 
+        count={countdown} 
+        onComplete={() => console.log('Countdown complete!')} 
+      />
+      
       {/* Header */}
       <div className="flex justify-between items-start">
         <Link to="/home">
@@ -147,39 +181,57 @@ export function LobbyPage() {
         </Button>
       </div>
 
-      {/* Lobby Header */}
-      <LobbyHeader 
-        code={code} 
-        wsConnected={wsConnected}
-        playerCount={lobby.player_count}
-      />
-
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Player List */}
-        <div className="lg:col-span-1 space-y-6">
-          <PlayerList
-            players={lobby.players}
-            currentPlayer={lobby.you}
-            playerCount={lobby.player_count}
-            loading={loading}
-          />
-
-          <HostControls
-            isHost={lobby.you?.is_host || false}
+      {isPlaying ? (
+        /* Game Board */
+        <GameBoard
+          gameState={lobby.game_state}
+          currentPlayerId={lobby.you?.id || ''}
+          players={lobby.players.map(p => ({ id: p.id, name: p.name }))}
+          onPlayCard={playCard}
+          onAdvance={advanceLevel}
+          onRestart={restartLevel}
+        />
+      ) : (
+        /* Lobby Interface */
+        <>
+          {/* Lobby Header */}
+          <LobbyHeader 
+            code={code} 
+            wsConnected={wsConnected}
             playerCount={lobby.player_count}
           />
-        </div>
 
-        {/* Right Column - Chat */}
-        <div className="lg:col-span-2">
-          <LobbyChat
-            messages={messages}
-            onSendMessage={sendChatMessage}
-            disabled={!wsConnected}
-          />
-        </div>
-      </div>
+          {/* Main Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column - Player List */}
+            <div className="lg:col-span-1 space-y-6">
+              <PlayerList
+                players={lobby.players}
+                currentPlayer={lobby.you}
+                playerCount={lobby.player_count}
+                loading={loading}
+              />
+
+              <HostControls
+                isHost={lobby.you?.is_host || false}
+                playerCount={lobby.player_count}
+                connectedCount={connectedCount}
+                isStarting={isStarting}
+                onStartGame={startGame}
+              />
+            </div>
+
+            {/* Right Column - Chat */}
+            <div className="lg:col-span-2">
+              <LobbyChat
+                messages={messages}
+                onSendMessage={sendChatMessage}
+                disabled={!wsConnected}
+              />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

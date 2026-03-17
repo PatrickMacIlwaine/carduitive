@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 import uuid
@@ -25,6 +25,7 @@ class Player:
     user_id: int | None = None
     avatar_url: str | None = None
     is_authenticated: bool = False
+    is_ready: bool = False  # Ready to start game
 
 
 @dataclass
@@ -32,7 +33,11 @@ class Lobby:
     code: str
     players: List[Player] = field(default_factory=list)
     messages: List[ChatMessage] = field(default_factory=list)
-    status: str = "waiting"  # waiting, playing, ended
+    status: str = "waiting"  # waiting, starting, playing, ended
+    game_type: str = "classic"  # Type of game to play
+    game: Any = None  # Game instance (populated when game starts)
+    current_level: int = 1  # Current game level
+    countdown: Optional[int] = None  # Countdown value (3, 2, 1, None)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     
@@ -92,11 +97,19 @@ class Lobby:
         """Get recent messages from the lobby."""
         return self.messages[-limit:] if self.messages else []
     
-    def to_dict(self, include_players: bool = True) -> dict:
+    def to_dict(self, include_players: bool = True, player_id: Optional[str] = None) -> dict:
+        # Get connected players from WebSocket manager
+        from app.websocket import lobby_manager_ws
+        connected_players = lobby_manager_ws.get_connected_players(self.code)
+        connected_set = set(connected_players)
+        
         result = {
             "code": self.code,
             "status": self.status,
+            "game_type": self.game_type,
             "player_count": self.player_count,
+            "current_level": self.current_level,
+            "countdown": self.countdown,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
@@ -109,9 +122,21 @@ class Lobby:
                     "joined_at": p.joined_at.isoformat(),
                     "avatar_url": p.avatar_url,
                     "is_authenticated": p.is_authenticated,
+                    "is_ready": p.is_ready,
+                    "is_connected": p.id in connected_set,  # Connection status
                 }
                 for p in self.players
             ]
+        
+        # Include game state if game is active
+        if self.game and self.status == "playing":
+            if player_id:
+                # Include this player's private info
+                result["game_state"] = self.game.get_player_state(player_id)
+            else:
+                # Public state only
+                result["game_state"] = self.game.get_public_state()
+        
         return result
 
 
@@ -208,6 +233,76 @@ class LobbyManager:
                 lobby.players[0].is_host = True
         
         return removed
+    
+    def start_game(self, code: str, game_type: str, config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Start a game in a lobby.
+        Only the host can start the game.
+        """
+        from app.games.factory import GameFactory
+        
+        lobby = self._lobbies.get(code)
+        if not lobby:
+            return None
+        
+        # Check if lobby is in waiting or starting state
+        if lobby.status not in ["waiting", "starting"]:
+            return {"error": "Game already in progress"}
+        
+        # Check minimum players
+        if lobby.player_count < 1:  # Configurable minimum
+            return {"error": "Not enough players to start game"}
+        
+        # Create game instance
+        game = GameFactory.create_game(game_type, code, lobby.players)
+        if not game:
+            return {"error": f"Unknown game type: {game_type}"}
+        
+        # Assign game to lobby
+        lobby.game = game
+        lobby.game_type = game_type
+        
+        # Start the game (this deals cards)
+        try:
+            game_state = game.start_game(config)
+            lobby.status = "playing"
+            lobby.updated_at = datetime.now()
+            return game_state
+        except Exception as e:
+            lobby.game = None
+            return {"error": f"Failed to start game: {str(e)}"}
+    
+    def handle_game_action(self, code: str, player_id: str, action: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Handle a game action from a player.
+        """
+        lobby = self._lobbies.get(code)
+        if not lobby or not lobby.game:
+            return None
+        
+        result = lobby.game.handle_action(player_id, action, data)
+        lobby.updated_at = datetime.now()
+        
+        # Handle level transitions and update lobby.current_level
+        if action in ["advance", "restart"]:
+            lobby.current_level = lobby.game.level
+            lobby.game_type = lobby.game.get_game_type()  # Ensure consistency
+        
+        return result
+    
+    def get_game_state(self, code: str, player_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get current game state.
+        If player_id provided, returns player-specific state with their private info.
+        """
+        lobby = self._lobbies.get(code)
+        if not lobby or not lobby.game:
+            return None
+        
+        if player_id:
+            return lobby.game.get_player_state(player_id)
+        else:
+            return lobby.game.get_public_state()
     
     def list_lobbies(self) -> List[Lobby]:
         """List all active lobbies."""
