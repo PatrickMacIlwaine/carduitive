@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Lobby, ChatMessage, WebSocketMessage } from '@/types/lobby'
+import { API_URL } from '@/contexts/AuthContext'
 
 interface UseLobbyReturn {
   lobby: Lobby | null
@@ -38,7 +39,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   // Fetch lobby data from API
   const fetchLobby = useCallback(async () => {
     try {
-      const res = await fetch(`/api/lobbies/${lobbyCode}`, {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}`, {
         credentials: 'include'
       })
       
@@ -344,7 +345,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
       setLoading(true)
       setError(null)
       
-      const res = await fetch(`/api/lobbies/${lobbyCode}/join`, {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -388,7 +389,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     try {
       setLoading(true)
       
-      const res = await fetch('/api/lobbies', {
+      const res = await fetch(`${API_URL}/lobbies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -422,7 +423,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   // Leave lobby
   const leaveLobby = useCallback(async () => {
     try {
-      await fetch(`/api/lobbies/${lobbyCode}/leave`, {
+      await fetch(`${API_URL}/lobbies/${lobbyCode}/leave`, {
         method: 'POST',
         credentials: 'include'
       })
@@ -463,7 +464,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     try {
       setIsStarting(true)
       
-      const res = await fetch(`/api/lobbies/${lobbyCode}/start`, {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -496,7 +497,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   // Play a card
   const playCard = useCallback(async (card: number): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/lobbies/${lobbyCode}/action`, {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -531,7 +532,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   // Advance to next level
   const advanceLevel = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/lobbies/${lobbyCode}/action`, {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -567,7 +568,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   // Restart current level
   const restartLevel = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/lobbies/${lobbyCode}/action`, {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

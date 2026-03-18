@@ -4,6 +4,7 @@ import { LobbyCodeInput } from '@/components/lobby/LobbyCodeInput'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAuth } from '@/hooks/useAuth'
+import { API_URL } from '@/contexts/AuthContext'
 
 function generateLobbyCode(): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -24,7 +25,7 @@ export function HomePage() {
   }
 
   const handleLogin = () => {
-    window.location.href = '/api/auth/google/login?redirect=/home'
+    window.location.href = `${API_URL}/auth/google/login?redirect=/home`
   }
 
   return (
