@@ -74,9 +74,9 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
       return
     }
 
-    // Connect directly to backend WebSocket, not through Vite dev server
-    const backendHost = window.location.hostname + ':8000'
-    const wsUrl = `ws://${backendHost}/ws/lobby/${lobbyCode}`
+    // Use same origin - works in both dev (Vite proxy) and production (Ingress proxy)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.host}/ws/lobby/${lobbyCode}`
     
     console.log('Connecting to WebSocket:', wsUrl)
     const ws = new WebSocket(wsUrl)

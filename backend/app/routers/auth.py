@@ -50,13 +50,10 @@ async def google_login(request: Request):
     client_id = settings.google_client_id
     client_secret = settings.google_client_secret
     
-    print(f"DEBUG: GOOGLE_CLIENT_ID = '{client_id}'")
-    print(f"DEBUG: GOOGLE_CLIENT_SECRET set = {bool(client_secret)}")
-    
     if not client_id or not client_secret:
         raise HTTPException(
             status_code=500,
-            detail=f"Google OAuth not configured. GOOGLE_CLIENT_ID='{client_id}', GOOGLE_CLIENT_SECRET set={bool(client_secret)}"
+            detail="Google OAuth not configured"
         )
     
     # Store redirect URL in session for after auth
@@ -70,18 +67,13 @@ async def google_login(request: Request):
 @router.get("/google/callback", name="google_callback")
 async def google_callback(request: Request, response: Response):
     """Handle Google OAuth callback."""
-    print(f"DEBUG: Callback received. Query params: {dict(request.query_params)}")
-    
     try:
         token = await oauth.google.authorize_access_token(request)
-        print(f"DEBUG: Got token: {token}")
     except Exception as e:
-        print(f"DEBUG: OAuth error: {e}")
         raise HTTPException(status_code=400, detail=f"OAuth authentication failed: {str(e)}")
     
     # Get user info from token
     user_info = token.get('userinfo')
-    print(f"DEBUG: User info: {user_info}")
     
     if not user_info:
         raise HTTPException(status_code=400, detail="Failed to get user info from Google")
@@ -122,15 +114,12 @@ async def google_callback(request: Request, response: Response):
     
     # Create JWT token
     auth_token = create_token(user.id, user.google_id, user.email, user.name, user.avatar_url)
-    print(f"DEBUG: Created token for user: {user.name}")
     
     # Build redirect URL
     redirect_to = request.session.get("redirect_after_auth", "/home")
     frontend_url = f"{settings.frontend_url}{redirect_to}"
     
-    # Create response with redirect and cookie
-    
-    # Set cookie on a response first, then redirect
+    # Set cookie and redirect
     response = RedirectResponse(url=frontend_url, status_code=302)
     response.set_cookie(
         key="auth_token",
@@ -140,7 +129,6 @@ async def google_callback(request: Request, response: Response):
         samesite="lax",
         secure=settings.environment == "production"
     )
-    print(f"DEBUG: Cookie set, redirecting to: {frontend_url}")
     
     return response
 

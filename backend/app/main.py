@@ -3,12 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
 import json
-import os
 
 from app.database import engine, Base
+from app.config import get_settings
 from app.routers import counter, leaderboard, lobbies, auth
 from app.websocket import lobby_manager_ws
 from app.lobby_manager import lobby_manager
+
+settings = get_settings()
 
 
 @asynccontextmanager
@@ -25,18 +27,30 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
+    # Trust proxy headers from Ingress for correct HTTPS redirect URIs
+    root_path="" if settings.environment == "development" else "",
 )
 
 # Session middleware for OAuth
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production"),
+    secret_key=settings.secret_key,
     max_age=3600 * 24 * 7,  # 7 days
 )
 
+# CORS - same-origin in production, allow localhost in dev
+cors_origins = [
+    "http://localhost:5173",
+    "http://localhost:8000",
+]
+if settings.environment == "production":
+    cors_origins = [
+        settings.frontend_url,  # https://carduitive.com
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,10 +76,6 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
     session_cookie_name = f"lobby_{lobby_code}"
     session_id = cookies.get(session_cookie_name)
     
-    print(f"DEBUG WebSocket cookies: {dict(cookies)}")
-    print(f"DEBUG Looking for cookie: {session_cookie_name}")
-    print(f"DEBUG Session ID: {session_id}")
-    
     # Find player by session
     player_id = None
     player_name = "Unknown"
@@ -74,11 +84,6 @@ async def websocket_lobby(websocket: WebSocket, lobby_code: str):
         if player:
             player_id = player.id
             player_name = player.name
-            print(f"DEBUG Found player: {player_name} ({player_id})")
-        else:
-            print(f"DEBUG No player found for session: {session_id}")
-    else:
-        print("DEBUG No session cookie found")
     
     # Connect to lobby room with player tracking
     await lobby_manager_ws.connect(websocket, lobby_code, player_id)
