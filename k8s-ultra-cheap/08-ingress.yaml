@@ -1,0 +1,50 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: carduitive-ingress
+  namespace: carduitive
+  annotations:
+    # Use GCE ingress controller (default on GKE)
+    kubernetes.io/ingress.class: "gce"
+    # Redirect HTTP to HTTPS
+    kubernetes.io/ingress.allow-http: "true"
+    networking.gke.io/v1beta1.FrontendConfig: "carduitive-frontend-config"
+spec:
+  rules:
+    - host: carduitive.com
+      http:
+        paths:
+          # Backend API routes
+          - path: /api/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+          # WebSocket routes
+          - path: /ws/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+          # Frontend (default - everything else)
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: carduitive-frontend-config
+  namespace: carduitive
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
