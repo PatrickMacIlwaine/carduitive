@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useMemo } from 'react'
 import type { User } from '@/types/lobby'
 
-const API_URL = '/api'
+export const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 interface AuthState {
   user: User | null

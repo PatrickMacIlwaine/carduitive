@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { User } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
+import { API_URL } from '@/contexts/AuthContext'
 
 interface GoogleLoginButtonProps {
   redirect?: string
@@ -12,7 +13,7 @@ export function GoogleLoginButton({ redirect }: GoogleLoginButtonProps) {
   const handleLogin = () => {
     // Use current path as redirect if not specified
     const redirectPath = redirect || location.pathname + location.search
-    const loginUrl = `/api/auth/google/login?redirect=${encodeURIComponent(redirectPath)}`
+    const loginUrl = `${API_URL}/auth/google/login?redirect=${encodeURIComponent(redirectPath)}`
     window.location.href = loginUrl
   }
 

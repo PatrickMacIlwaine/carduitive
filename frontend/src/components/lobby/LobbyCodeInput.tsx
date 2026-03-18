@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { API_URL } from '@/contexts/AuthContext'
 
 export function LobbyCodeInput() {
   const [lobbyCode, setLobbyCode] = useState('')
@@ -41,7 +42,7 @@ export function LobbyCodeInput() {
     // Check if lobby exists before navigating
     setIsChecking(true)
     try {
-      const res = await fetch(`/api/lobbies/${lobbyCode}`, {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}`, {
         credentials: 'include'
       })
       

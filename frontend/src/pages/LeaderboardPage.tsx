@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Trophy, Medal, Award, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { API_URL } from '@/contexts/AuthContext'
 
 interface LeaderboardEntry {
   id: number
@@ -77,7 +78,7 @@ export function LeaderboardPage() {
         setError(null)
         
         // Fetch leaderboard entries
-        const entriesRes = await fetch('/api/leaderboard?limit=10')
+        const entriesRes = await fetch(`${API_URL}/leaderboard?limit=10`)
         if (!entriesRes.ok) {
           throw new Error('Failed to fetch leaderboard')
         }
@@ -85,7 +86,7 @@ export function LeaderboardPage() {
         setEntries(entriesData)
         
         // Fetch stats
-        const statsRes = await fetch('/api/leaderboard/stats')
+        const statsRes = await fetch(`${API_URL}/leaderboard/stats`)
         if (!statsRes.ok) {
           throw new Error('Failed to fetch stats')
         }

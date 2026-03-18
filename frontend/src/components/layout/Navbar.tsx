@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import { API_URL } from '@/contexts/AuthContext'
 
 export function Navbar() {
   const location = useLocation()
@@ -17,7 +18,7 @@ export function Navbar() {
   ]
 
   const handleLogin = () => {
-    window.location.href = '/api/auth/google/login?redirect=/home'
+    window.location.href = `${API_URL}/auth/google/login?redirect=/home`
   }
 
   const handleLogout = async () => {
