@@ -1,6 +1,7 @@
 from fastapi import WebSocket
 from typing import Dict, List, Optional
 import json
+import asyncio
 from datetime import datetime
 
 
@@ -45,32 +46,29 @@ class LobbyConnectionManager:
         """Disconnect a websocket and remove from its lobby."""
         lobby_code = self.websocket_to_lobby.get(websocket)
         player_id = self.websocket_to_player.get(websocket)
-        
+
         if lobby_code and lobby_code in self.lobby_connections:
             if websocket in self.lobby_connections[lobby_code]:
                 self.lobby_connections[lobby_code].remove(websocket)
-                
+
                 # Remove player from connected set
                 if player_id and lobby_code in self.connected_players:
                     self.connected_players[lobby_code].discard(player_id)
                     if len(self.connected_players[lobby_code]) == 0:
                         del self.connected_players[lobby_code]
-                
+
                 # Clean up empty lobbies
                 if len(self.lobby_connections[lobby_code]) == 0:
                     del self.lobby_connections[lobby_code]
-        
+
         if websocket in self.websocket_to_lobby:
             del self.websocket_to_lobby[websocket]
-        
+
         if websocket in self.websocket_to_player:
             del self.websocket_to_player[websocket]
-        
+
         if lobby_code:
             print(f"WebSocket disconnected from lobby {lobby_code}")
-            # Note: We don't broadcast here because the disconnect happens
-            # after the HTTP response. The lobby update will happen via the
-            # leave_lobby endpoint or periodic refresh.
 
     def is_player_connected(self, lobby_code: str, player_id: str) -> bool:
         """Check if a specific player is connected via WebSocket."""
@@ -99,9 +97,11 @@ class LobbyConnectionManager:
                     print(f"Error broadcasting to websocket: {e}")
                     disconnected.append(connection)
             
-            # Clean up disconnected websockets
-            for conn in disconnected:
-                self.disconnect(conn)
+            # Clean up disconnected websockets and notify remaining players
+            if disconnected:
+                for conn in disconnected:
+                    self.disconnect(conn)
+                await self.broadcast_connection_update(lobby_code)
 
     async def broadcast_connection_update(self, lobby_code: str):
         """Broadcast connection status update to all players."""
@@ -141,6 +141,21 @@ class LobbyConnectionManager:
             "data": lobby_data
         })
         await self.broadcast_to_lobby(message, lobby_code)
+
+    async def heartbeat(self, interval: int = 10):
+        """Periodically broadcast connection status to all active lobbies.
+
+        This serves two purposes:
+        1. Detects dead WebSocket connections (failed sends trigger cleanup).
+        2. Keeps clients up-to-date with who is connected.
+        """
+        while True:
+            await asyncio.sleep(interval)
+            # Snapshot lobby codes to avoid dict-changed-during-iteration
+            lobby_codes = list(self.lobby_connections.keys())
+            for lobby_code in lobby_codes:
+                if lobby_code in self.lobby_connections:
+                    await self.broadcast_connection_update(lobby_code)
 
 
 # Global lobby connection manager instance
