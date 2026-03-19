@@ -1,14 +1,17 @@
 # Ultra-Cheap GCP Deployment Guide
 
-## Cost: ~$20-25/month (vs $100+ for standard setup)
+## Cost: ~$17-21/month (vs $100+ for standard setup)
 
 ### Architecture
-- 1x e2-micro node (us-east1) - $15/month
-- In-cluster PostgreSQL with 5GB persistent disk
-- NodePort services (no LoadBalancer fees)
-- Cloudflare SSL (free)
-- Google Artifact Registry (~$0.20/month)
+- 1x e2-micro node (us-east1-b) - ~$15/month
+- In-cluster PostgreSQL with 5GB persistent disk (~$0.20/month)
+- NodePort services — no LoadBalancer fees
+- Frontend uses `hostNetwork: true` to bind nginx directly to node port 80
+- Cloudflare proxies HTTPS → node external IP (free SSL)
+- Google Artifact Registry (~$0.10/month)
 - GCP Secret Manager for secrets (free tier: 10,000 access operations/month)
+
+**Traffic path:** Cloudflare → Node External IP:80 → nginx (frontend) → proxy to backend NodePort
 
 ---
 
@@ -40,7 +43,7 @@ Navigate to **APIs & Services > Library** and enable:
 ## Step 2: Create GKE Cluster (Browser)
 
 1. Go to **Kubernetes Engine > Clusters**
-2. Click **Create Cluster**
+2. Click **Create Cluster** → Select **Standard** (not Autopilot)
 3. **Cluster basics:**
    - Name: `carduitive3-cluster`
    - Location type: Zonal
@@ -50,7 +53,7 @@ Navigate to **APIs & Services > Library** and enable:
    - Machine type: **e2-micro** (1 vCPU, 1GB memory)
    - Disk size: 20GB
 5. **Networking:**
-   - Enable HTTP load balancing: **OFF** (we're using NodePort)
+   - Enable HTTP load balancing: **OFF** (we're using NodePort + hostNetwork)
 6. Click **Create** (takes ~5 minutes)
 
 ---
