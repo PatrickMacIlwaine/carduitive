@@ -303,7 +303,8 @@ export function GameBoard({
             status,
             level,
             player_hands,
-            my_hand
+            my_hand,
+            progression
           }}
           players={players}
           currentPlayerId={currentPlayerId}
