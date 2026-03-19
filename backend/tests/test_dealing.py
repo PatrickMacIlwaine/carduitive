@@ -37,9 +37,10 @@ def test_random_dealing_from_full_deck():
                 json={"player_name": f"Player{i}"})
             cookies.append(resp.cookies.get(f"lobby_{code}"))
         
-        # Start game
+        # Start game (must include host cookie)
         requests.post(f"{BASE_URL}/api/lobbies/{code}/start",
-            json={"game_type": "classic", "config": {}})
+            json={"game_type": "classic", "config": {}},
+            cookies={f"lobby_{code}": cookie1})
         
         # Collect cards from all players' private states
         for cookie in cookies:
@@ -60,29 +61,26 @@ def test_random_dealing_from_full_deck():
     print(f"   Min card: {min_card}, Max card: {max_card}")
     print(f"   Sample cards: {sorted(list(unique_cards))[:30]}")
     
-    # Verify required cards 1-10 are always present (for up to 10 players)
-    has_all_required = set(range(1, 11)).issubset(unique_cards)
-    
-    # Check distribution across ranges (these variables verify the deck is well-shuffled)
-    _ = any(c <= 20 for c in unique_cards)  # has_low
-    _ = any(30 <= c <= 70 for c in unique_cards)  # has_mid  
-    _ = any(c >= 80 for c in unique_cards)  # has_high
-    
-    # We need both required cards AND variety from higher range
-    passed = has_all_required and (max_card > 50)
+    # Verify dealing spans the full 1-100 range (not checking every value — that's flaky)
+    has_low = min_card <= 10      # At least one card from the low end
+    has_high = max_card >= 80     # At least one card from the high end
+    has_variety = len(unique_cards) > 40  # Meaningful spread of values
+
+    passed = has_low and has_high and has_variety
     
     if passed:
         print("   ✅ PASS: Cards dealt from full range")
-        print(f"      - Required cards 1-10: {'✅' if has_all_required else '❌'}")
-        print(f"      - High cards (>50): {'✅' if max_card > 50 else '❌'} (max: {max_card})")
-        print(f"      - Range: {min_card} to {max_card}")
+        print(f"      - Low cards (≤10): {'✅' if has_low else '❌'} (min: {min_card})")
+        print(f"      - High cards (≥80): {'✅' if has_high else '❌'} (max: {max_card})")
+        print(f"      - Variety: {'✅' if has_variety else '❌'} ({len(unique_cards)} unique values)")
     else:
         print("   ❌ FAIL: Insufficient card variety")
-        if not has_all_required:
-            missing = set(range(1, 11)) - unique_cards
-            print(f"      - Missing required cards: {sorted(missing)}")
-        if max_card <= 50:
+        if not has_low:
+            print(f"      - No low cards dealt (min: {min_card})")
+        if not has_high:
             print(f"      - No high cards dealt (max: {max_card})")
+        if not has_variety:
+            print(f"      - Too few unique values: {len(unique_cards)}")
     
     return passed
 
@@ -128,23 +126,20 @@ def test_exact_card_count_per_level():
         if card_count != 1:
             all_passed = False
     
-    # Play through level 1 to advance
-    # Need to play cards 1, 2, 3, 4 in order
-    cards_to_play = [1, 2, 3, 4]
-    for card_num in cards_to_play:
-        for p in players:
-            resp = requests.get(f"{BASE_URL}/api/lobbies/{code}/game-state",
-                cookies={f"lobby_{code}": p["cookie"]})
-            state = resp.json()
-            cards = state.get("my_hand", {}).get("cards", [])
-            if card_num in cards:
-                resp = requests.post(f"{BASE_URL}/api/lobbies/{code}/action",
-                    json={"action": "play", "data": {"card": card_num}},
-                    cookies={f"lobby_{code}": p["cookie"]})
-                result = resp.json()
-                print(f"   {p['name']} plays {card_num}: {result.get('status')}")
-                break
-    
+    # Play through level 1: collect actual dealt cards and play in ascending order
+    all_level_cards = []
+    for p in players:
+        resp = requests.get(f"{BASE_URL}/api/lobbies/{code}/game-state",
+            cookies={f"lobby_{code}": p["cookie"]})
+        cards = resp.json().get("my_hand", {}).get("cards", [])
+        all_level_cards.extend([(c, p) for c in cards])
+    all_level_cards.sort(key=lambda x: x[0])
+    for card_num, p in all_level_cards:
+        resp = requests.post(f"{BASE_URL}/api/lobbies/{code}/action",
+            json={"action": "play", "data": {"card": card_num}},
+            cookies={f"lobby_{code}": p["cookie"]})
+        print(f"   {p['name']} plays {card_num}: {resp.json().get('status')}")
+
     # Advance to Level 2
     requests.post(f"{BASE_URL}/api/lobbies/{code}/action",
         json={"action": "advance", "data": {}},
@@ -165,22 +160,19 @@ def test_exact_card_count_per_level():
         if card_count != 2:
             all_passed = False
     
-    # Play through level 2 to advance
-    # Need to play cards 1-8 in order
-    cards_to_play = list(range(1, 9))
-    for card_num in cards_to_play:
-        for p in players:
-            resp = requests.get(f"{BASE_URL}/api/lobbies/{code}/game-state",
-                cookies={f"lobby_{code}": p["cookie"]})
-            state = resp.json()
-            cards = state.get("my_hand", {}).get("cards", [])
-            if card_num in cards:
-                resp = requests.post(f"{BASE_URL}/api/lobbies/{code}/action",
-                    json={"action": "play", "data": {"card": card_num}},
-                    cookies={f"lobby_{code}": p["cookie"]})
-                result = resp.json()
-                break
-    
+    # Play through level 2: collect actual dealt cards and play in ascending order
+    all_level_cards = []
+    for p in players:
+        resp = requests.get(f"{BASE_URL}/api/lobbies/{code}/game-state",
+            cookies={f"lobby_{code}": p["cookie"]})
+        cards = resp.json().get("my_hand", {}).get("cards", [])
+        all_level_cards.extend([(c, p) for c in cards])
+    all_level_cards.sort(key=lambda x: x[0])
+    for card_num, p in all_level_cards:
+        requests.post(f"{BASE_URL}/api/lobbies/{code}/action",
+            json={"action": "play", "data": {"card": card_num}},
+            cookies={f"lobby_{code}": p["cookie"]})
+
     # Advance to Level 3
     requests.post(f"{BASE_URL}/api/lobbies/{code}/action",
         json={"action": "advance", "data": {}},

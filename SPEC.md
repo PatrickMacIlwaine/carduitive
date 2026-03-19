@@ -21,6 +21,7 @@
 | TypeScript | 5.x | Type Safety |
 | shadcn/ui | Latest | UI Components |
 | Lucide React | Latest | Icons |
+| Framer Motion | Latest | Card animations and game board transitions |
 
 ### Backend
 | Technology | Version | Purpose |
@@ -40,8 +41,11 @@
 ### Infrastructure
 | Technology | Purpose |
 |------------|---------|
-| GKE Autopilot | Kubernetes Orchestration |
-| Cloud SQL Auth Proxy | Secure DB Connection |
+| GKE Standard (single e2-micro node) | Kubernetes Orchestration |
+| NodePort + nginx proxy | Traffic routing (no LoadBalancer cost) |
+| Cloudflare | SSL termination and DNS |
+| GCP Artifact Registry | Docker image storage |
+| GCP Secret Manager | Secrets management |
 | GitHub Actions | CI/CD |
 
 ---
@@ -220,17 +224,28 @@
 │  │  │  • wsConnected: boolean                                │ ││
 │  │  │  • loading: boolean                                    │ ││
 │  │  │  • error: string | null                                │ ││
+│  │  │  • countdown: number | null                            │ ││
+│  │  │  • isStarting: boolean                                 │ ││
 │  │  │                                                          │ ││
 │  │  │  Methods:                                              │ ││
 │  │  │  • joinLobby(name) → HTTP POST + WS connect           │ ││
 │  │  │  • createLobby(name) → HTTP POST + WS connect          │ ││
 │  │  │  • leaveLobby() → HTTP POST + WS disconnect          │ ││
 │  │  │  • sendChatMessage(msg) → WS emit                    │ ││
+│  │  │  • startGame() → HTTP POST /start                     │ ││
+│  │  │  • playCard(card) → HTTP POST /action {play}          │ ││
+│  │  │  • advanceLevel() → HTTP POST /action {advance}       │ ││
+│  │  │  • restartLevel() → HTTP POST /action {restart}       │ ││
 │  │  │                                                          │ ││
 │  │  │  WebSocket Handlers:                                   │ ││
 │  │  │  • onLobbyUpdate(data) → Merge players, preserve 'you'│ ││
+│  │  │  • onConnectionUpdate → Update player connected status │ ││
 │  │  │  • onPlayerJoined(name) → Add system message           │ ││
 │  │  │  • onChat(data) → Append message (deduplicated)       │ ││
+│  │  │  • onCountdown(count) → Show countdown overlay        │ ││
+│  │  │  • onGameStarted(data) → Transition to game board     │ ││
+│  │  │  • onGameUpdate(data) → Update shared game state      │ ││
+│  │  │  • onLevelStarted(data) → Fetch fresh state (private) │ ││
 │  │  └────────────────────────────────────────────────────────┘ ││
 │  │                                                              ││
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      ││
@@ -240,7 +255,22 @@
 │  │  │ Props:       │  │ Props:       │  │ Props:       │      ││
 │  │  │ • players    │  │ • messages   │  │ • isHost     │      ││
 │  │  │ • you        │  │ • onSend     │  │ • playerCount│      ││
-│  │  │ • count      │  │ • disabled   │  │              │      ││
+│  │  │ • count      │  │ • disabled   │  │ • connectedCount     ││
+│  │  │              │  │ • mode       │  │ • isStarting │      ││
+│  │  │              │  │   (inline/   │  │ • onStartGame│      ││
+│  │  │              │  │    overlay)  │  │              │      ││
+│  │  └──────────────┘  └──────────────┘  └──────────────┘      ││
+│  │                                                              ││
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      ││
+│  │  │  GameBoard   │  │ GameResults  │  │CountdownOvly │      ││
+│  │  │  Component   │  │  (Overlay)   │  │  Component   │      ││
+│  │  │              │  │              │  │              │      ││
+│  │  │ Shows when:  │  │ Shows when:  │  │ Shows when:  │      ││
+│  │  │ isPlaying    │  │ success/fail │  │ countdown    │      ││
+│  │  │              │  │              │  │ != null      │      ││
+│  │  │ Fanned card  │  │ Per-player   │  │              │      ││
+│  │  │ hand + back- │  │ card reveal  │  │ 3-2-1 timer  │      ││
+│  │  │ face others  │  │ + actions    │  │              │      ││
 │  │  └──────────────┘  └──────────────┘  └──────────────┘      ││
 │  │                                                              ││
 │  └─────────────────────────────────────────────────────────────┘│
@@ -326,27 +356,38 @@
 │  │  ├── _lobbies: Dict[str, Lobby]                            ││
 │  │  ├── create_lobby(code)                                    ││
 │  │  ├── get_lobby(code)                                       ││
-│  │  ├── join_lobby(code, name)                                ││
+│  │  ├── join_lobby(code, name, user_id, avatar_url, ...)      ││
 │  │  ├── leave_lobby(code, player_id)                          ││
-│  │  ├── is_name_taken(code, name, exclude_session)            ││
+│  │  ├── start_game(code, game_type, config)                   ││
+│  │  ├── handle_game_action(code, player_id, action, data)     ││
+│  │  ├── get_game_state(code, player_id?)                      ││
+│  │  ├── handle_player_reconnect(code, player_id)              ││
+│  │  ├── is_name_taken(code, name)                             ││
 │  │  └── get_player_by_session(code, session_id)               ││
 │  │                                                              ││
 │  │  Lobby                                                       ││
 │  │  ├── code: str                                              ││
 │  │  ├── players: List[Player]                                   ││
 │  │  ├── messages: List[ChatMessage]                            ││
-│  │  ├── status: str                                            ││
+│  │  ├── status: str (waiting/starting/playing/ended)           ││
+│  │  ├── game: Game | None  (active game instance)             ││
+│  │  ├── current_level: int | None                             ││
+│  │  ├── game_type: str | None                                 ││
+│  │  ├── countdown: int | None                                 ││
 │  │  ├── add_player(name, is_host)                             ││
-│  │  ├── remove_player(player_id)                                ││
+│  │  ├── remove_player(player_id)                               ││
 │  │  ├── add_message(...)                                       ││
 │  │  ├── get_messages(limit)                                   ││
-│  │  └── to_dict()  [NO session_ids, NO you field]            ││
+│  │  └── to_dict(player_id?)  [NO session_ids, NO you field]  ││
 │  │                                                              ││
 │  │  Player                                                      ││
 │  │  ├── id: str (UUID)                                         ││
 │  │  ├── name: str                                              ││
 │  │  ├── is_host: bool                                         ││
 │  │  ├── session_id: str (UUID, cookie value)                  ││
+│  │  ├── avatar_url: str | None                                ││
+│  │  ├── is_authenticated: bool                                ││
+│  │  ├── user_id: int | None                                   ││
 │  │  └── joined_at: datetime                                    ││
 │  │                                                              ││
 │  │  ChatMessage                                                ││
@@ -356,6 +397,35 @@
 │  │  ├── message: str                                          ││
 │  │  ├── timestamp: datetime                                   ││
 │  │  └── type: str (chat/system)                               ││
+│  │                                                              ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │              Game Engine (app/games/)                       ││
+│  │                                                              ││
+│  │  Game (ABC - base.py)                                       ││
+│  │  ├── lobby_code, players, status, config                   ││
+│  │  ├── start_game(config) → public_state                     ││
+│  │  ├── handle_action(player_id, action, data) → state        ││
+│  │  ├── get_public_state() → shared state (no private cards)  ││
+│  │  ├── get_player_state(player_id) → state + my_hand         ││
+│  │  └── log_action(type, player_id, data)                     ││
+│  │                                                              ││
+│  │  ClassicCarduitive (classic.py)                            ││
+│  │  Cooperative ascending-order card game                     ││
+│  │  ├── deal_cards(level) → N cards per player from 1-100    ││
+│  │  ├── play(player_id, card) → validate + check win/fail     ││
+│  │  │   Rule: must play the globally lowest card remaining    ││
+│  │  ├── advance() → increment level, re-deal                  ││
+│  │  └── restart() → re-deal same level                        ││
+│  │                                                              ││
+│  │  GameStatus: SETUP | WAITING | PLAYING | SUCCESS |         ││
+│  │              FAILED | COMPLETED                             ││
+│  │                                                              ││
+│  │  Public state: level, played_cards, last_played,           ││
+│  │    next_expected, player_hands (card_count only),           ││
+│  │    status, attempts, progression                            ││
+│  │  Private state (per player): adds my_hand.cards            ││
 │  │                                                              ││
 │  └─────────────────────────────────────────────────────────────┘│
 │                                                                  │
@@ -469,19 +539,14 @@
 
 ## Design System
 
-### Color Palette
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Primary Dark | `#09637E` | Buttons, active states |
-| Primary Light | `#7AB2B2` | Accents, hover states |
-| Teal | `#088395` | Links, icons |
-| Off-White | `#EBF4F6` | Light mode backgrounds |
-| Dark BG | `#0F172A` | Dark mode backgrounds |
+See `STYLES.md` for the full design system documentation including color palette, typography, spacing, component styles, dark mode implementation, game board aesthetics, and Framer Motion animation patterns.
 
-### Features
-- **Dark Mode**: Full support with persistent user preference
-- **Responsive Design**: Mobile-first approach
-- **Component Library**: Custom shadcn/ui components
+### Summary
+- **Color Palette**: Teal/blue-green primary (`#09637E`), light teal accents (`#7AB2B2`), dark navy backgrounds in dark mode
+- **Dark Mode**: Class-based (`.dark` on `<html>`), persisted to localStorage, respects `prefers-color-scheme`
+- **Responsive**: Mobile-first with `sm:`, `md:`, `lg:` breakpoints
+- **Component Library**: shadcn/ui base components + custom game board components
+- **Animations**: Framer Motion for game interactions (card hover, deal-in, overlays)
 
 ---
 
@@ -499,6 +564,44 @@
 ## API Specification
 
 ### REST Endpoints
+
+#### Lobbies
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/lobbies` | Create a new lobby |
+| GET | `/api/lobbies/{code}` | Get lobby details (includes `you` if session cookie present) |
+| POST | `/api/lobbies/{code}/join` | Join an existing lobby |
+| POST | `/api/lobbies/{code}/leave` | Leave a lobby |
+| DELETE | `/api/lobbies/{code}` | Delete a lobby (host only) |
+| GET | `/api/lobbies/{code}/messages` | Get chat message history |
+| POST | `/api/lobbies/{code}/messages` | Send a chat message (HTTP fallback) |
+| POST | `/api/lobbies/{code}/start` | Start game with 3-2-1 countdown (host only) |
+| POST | `/api/lobbies/{code}/action` | Perform a game action (play/pass/advance/restart) |
+| GET | `/api/lobbies/{code}/game-state` | Get current game state including private hand |
+
+**POST /api/lobbies/{code}/start** Request Body:
+```json
+{
+  "game_type": "classic",
+  "config": {
+    "deck_size": 100,
+    "timing_mode": "relaxed"
+  }
+}
+```
+
+**POST /api/lobbies/{code}/action** Request Body:
+```json
+{
+  "action": "play",
+  "data": { "card": 42 }
+}
+```
+Actions: `play` (data: `{card: number}`), `pass` (data: `{}`), `advance` (data: `{}`), `restart` (data: `{}`)
+
+**Action Response**: Returns player-specific game state including `my_hand`. Also triggers a WebSocket broadcast.
+
+---
 
 #### Counter (Demo Endpoint)
 | Method | Endpoint | Description |
@@ -562,16 +665,23 @@
 
 | Type | Direction | Description |
 |------|-----------|-------------|
-| `connected` | Server → Client | Sent when client connects. Includes chat history |
+| `connected` | Server → Client | Sent when client connects. Includes chat history and connected player IDs |
 | `player_joined` | Server → Client | Broadcast when a new player joins |
 | `player_left` | Server → Client | Broadcast when a player leaves |
 | `lobby_update` | Server → Client | Broadcast when player list changes (NO `you` field) |
+| `connection_update` | Server → Client | Broadcast when a player's WebSocket connection status changes |
 | `chat` | Client ↔ Server | Chat messages |
+| `countdown` | Server → Client | 3-2-1 countdown before game start |
+| `game_started` | Server → Client | Game has started; includes initial public game state |
+| `game_update` | Server → Client | Broadcast after a play/pass action; includes updated public game state |
+| `level_started` | Server → Client | Broadcast after advance/restart; clients should re-fetch for private hand |
+| `error` | Server → Client | Error message |
 
-**Important Design Note:**
-- WebSocket broadcasts ONLY include player list, NOT the `you` field
-- Each client determines their own identity via their session cookie
-- This prevents "join form flashing" when new players join
+**Important Design Notes:**
+- WebSocket broadcasts ONLY include public game state, NOT private card hands
+- `you` field is never in WebSocket broadcasts — each client preserves their own identity
+- After `level_started`, clients call `GET /api/lobbies/{code}` to get their new private hand
+- `connection_update` carries a `connected_players` array of player IDs currently connected
 
 **Connected Message (Initial Load):**
 ```json
@@ -634,6 +744,48 @@
     "timestamp": "2026-03-15T16:10:00",
     "type": "chat"
   }
+}
+```
+
+**Countdown:**
+```json
+{
+  "type": "countdown",
+  "data": { "count": 3, "message": "Game starting in 3..." }
+}
+```
+
+**Game Started:**
+```json
+{
+  "type": "game_started",
+  "data": {
+    "game_type": "classic",
+    "game_state": { "level": 1, "status": "playing", "played_cards": [], ... },
+    "lobby": { ... }
+  }
+}
+```
+
+**Game Update (after play/pass):**
+```json
+{
+  "type": "game_update",
+  "data": {
+    "level": 1, "status": "playing",
+    "played_cards": [7],
+    "next_expected": 15,
+    "player_hands": { "uuid": { "card_count": 0, "cards_played": [7] }, ... }
+  }
+}
+```
+**Note:** `game_update` carries public state only. No `my_hand` — each player's private cards come only from HTTP responses.
+
+**Level Started (after advance/restart):**
+```json
+{
+  "type": "level_started",
+  "data": { "level": 2, "status": "playing", "action": "advance" }
 }
 ```
 
@@ -790,8 +942,11 @@ frontend/src/
 │   └── lobby/                   # Lobby-specific components
 │       ├── JoinLobbyForm.tsx    # Name input form (join/create)
 │       ├── PlayerList.tsx       # Display players with host badges
-│       ├── LobbyChat.tsx        # Real-time chat interface
-│       └── LobbyCodeInput.tsx   # Lobby code entry with validation
+│       ├── LobbyChat.tsx        # Real-time chat (inline + overlay modes)
+│       ├── LobbyCodeInput.tsx   # Lobby code entry with validation
+│       ├── GameBoard.tsx        # Main game UI (fanned hands, last played card)
+│       ├── GameResults.tsx      # Level success/failure overlay with card reveal
+│       └── CountdownOverlay.tsx # 3-2-1 countdown animation before game start
 ├── contexts/
 │   └── AuthContext.tsx          # Global auth state management
 ├── pages/
@@ -819,15 +974,19 @@ backend/
 │   ├── models.py                # SQLAlchemy DB models (Counter, Leaderboard, User)
 │   ├── config.py                # Application configuration + settings
 │   ├── database.py              # Async PostgreSQL connection
-│   ├── lobby_manager.py         # In-memory lobby + player + chat management
+│   ├── lobby_manager.py         # In-memory lobby + player + chat + game management
 │   ├── websocket.py             # WebSocket connection manager (room-based)
+│   ├── games/
+│   │   ├── base.py              # Abstract Game class + GameStatus enum + GameAction
+│   │   ├── classic.py           # ClassicCarduitive game implementation
+│   │   └── factory.py           # Game factory (creates game instances by type)
 │   ├── services/
 │   │   └── user_service.py      # User CRUD operations
 │   └── routers/
 │       ├── auth.py              # Google OAuth endpoints
 │       ├── counter.py           # Demo counter API
 │       ├── leaderboard.py       # Leaderboard CRUD
-│       └── lobbies.py          # Lobby HTTP API + chat endpoints
+│       └── lobbies.py           # Lobby HTTP API + game start/action endpoints
 ├── init_db.py                   # Database initialization script
 ├── start.sh                     # Development startup script
 ├── requirements.txt             # Python dependencies
@@ -839,11 +998,14 @@ backend/
 | File | Purpose |
 |------|---------|
 | `frontend/src/contexts/AuthContext.tsx` | Global auth state management |
-| `frontend/src/hooks/lobby/useLobby.ts` | Main hook managing lobby state, WebSocket, HTTP API |
+| `frontend/src/hooks/lobby/useLobby.ts` | All lobby + game state, WebSocket, HTTP actions |
+| `frontend/src/components/lobby/GameBoard.tsx` | Game UI: fanned hands, card play, opponent view |
+| `frontend/src/components/lobby/GameResults.tsx` | Post-round overlay with per-player card reveal |
 | `backend/app/routers/auth.py` | Google OAuth + JWT token management |
 | `backend/app/services/user_service.py` | User database operations |
-| `backend/app/lobby_manager.py` | In-memory data structures (Lobby, Player, ChatMessage classes) |
-| `backend/app/routers/lobbies.py` | HTTP endpoints for lobby CRUD + chat |
+| `backend/app/lobby_manager.py` | In-memory Lobby/Player/ChatMessage + game delegation |
+| `backend/app/games/classic.py` | Classic game logic: dealing, play validation, level progression |
+| `backend/app/routers/lobbies.py` | HTTP endpoints: lobby CRUD + game start/action/state |
 | `backend/app/main.py` | WebSocket endpoint + HTTP-to-WS broadcast bridge |
 | `backend/app/websocket.py` | Room-based WebSocket connection manager |
 
@@ -852,11 +1014,12 @@ backend/
 ## Kubernetes Configuration
 
 ### Components
-- **Frontend Deployment**: React app served via nginx
+- **Frontend Deployment**: React app served via nginx (hostNetwork, binds to port 80)
 - **Backend Deployment**: FastAPI application
-- **Service**: Internal load balancer for backend
-- **Ingress**: External HTTPS entry point
-- **Cloud SQL Proxy**: Sidecar for database connection
+- **Services**: NodePort (frontend: 30081, backend: 30080)
+- **No LoadBalancer/Ingress**: Traffic enters via Cloudflare → Node External IP → NodePort
+- **In-cluster PostgreSQL**: Runs as a pod with persistent volume (no Cloud SQL)
+- **Secrets**: Managed via GCP Secret Manager, synced to Kubernetes secrets manually
 
 ---
 
@@ -901,12 +1064,18 @@ backend/
 
 ### Completed ✅
 - **User authentication**: Google OAuth with JWT tokens, avatar support, persistent sessions
+- **Game logic (Classic Carduitive)**: Cooperative ascending-order card game with server-side validation
+- **Real-time game state**: WebSocket-driven countdown, card play broadcast, level transitions
+- **Game UI**: Fanned card hands with Framer Motion animations, per-player opponent view
+- **GameResults overlay**: Post-round card reveal for all players on success/failure
+- **Lobby management**: Player join/leave, connection status tracking, host controls, re-join
 
 ### Planned
-- Real-time game state synchronization via WebSockets
-- Game logic implementation (card dealing, turns, scoring)
-- Lobby management (player join/leave, game start)
-- Advanced leaderboard features (filters, time ranges)
+- Leaderboard integration on game completion (auto-submit scores)
+- Advanced leaderboard features (filters by time range, personal bests)
+- Additional game modes (timed, speedrun)
 - Monitoring and logging (Cloud Monitoring, Cloud Logging)
 - User profiles with editable display names and avatars
 - Friends system and invite functionality
+- Spectator mode
+- Game replay / action history view

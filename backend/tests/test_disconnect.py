@@ -4,7 +4,8 @@ Game logic is STATIC in backend - doesn't wait for anyone.
 """
 
 import sys
-sys.path.insert(0, '/Users/Patrick/code/carduitive/backend')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.games.classic import ClassicCarduitive
 from dataclasses import dataclass

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Wifi, WifiOff, Crown, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLobby } from '@/hooks/lobby/useLobby'
+import { useClassicGame } from '@/hooks/game/useClassicGame'
 import { useAuth } from '@/hooks/useAuth'
 import { PlayerList } from '@/components/lobby/PlayerList'
 import { LobbyChat } from '@/components/lobby/LobbyChat'
@@ -128,11 +129,12 @@ export function LobbyPage() {
     createLobby,
     leaveLobby,
     sendChatMessage,
-    startGame,
-    playCard,
-    advanceLevel,
-    restartLevel
+    startGame: startLobbyGame,
+    sendGameAction,
   } = useLobby(code)
+
+  // Classic game actions — add new game mode hooks here and dispatch by lobby.game_type
+  const { startGame, playCard, advanceLevel, restartLevel } = useClassicGame(sendGameAction, startLobbyGame)
 
   const isNewLobby = !loading && !lobby && !error
 
