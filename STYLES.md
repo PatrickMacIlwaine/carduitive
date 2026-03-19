@@ -227,6 +227,84 @@ Clip: bg-clip-text
 Text: text-transparent
 ```
 
+### Framer Motion (Game Animations)
+
+The game board uses `framer-motion` for animated interactions. Use `motion` components when:
+- Elements enter the screen (player hands, opponent cards, results overlay)
+- Cards are played or hovered
+- Countdown or level transition animations
+
+**Common patterns:**
+
+```tsx
+// Card deal-in
+<motion.div
+  initial={{ y: 20, opacity: 0 }}
+  animate={{ y: 0, opacity: 1 }}
+  transition={{ delay: index * 0.1 }}
+>
+
+// Card hover in hand
+<motion.button
+  whileHover={{ y: -30, scale: 1.15, zIndex: 20 }}
+  whileTap={{ scale: 0.95 }}
+>
+
+// Overlay entrance
+<motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+>
+```
+
+Use `transition-shadow` (CSS) for card shadows — avoid Framer Motion for simple shadow changes.
+
+---
+
+## Game Board Aesthetics
+
+The game board uses a **card-game visual style** that intentionally differs from the main app theme. Playing cards use neutral white/slate tones to evoke physical cards rather than the app's teal palette.
+
+### Playing Card (Face-up, Your Hand)
+```
+Background: bg-white
+Border: border-2 border-slate-300
+Border Radius: rounded-xl
+Shadow: shadow-xl
+Hover Border: hover:border-primary
+Number: text-slate-800 font-bold
+Corner Numbers: text-slate-400
+```
+
+### Playing Card (Face-down, Opponents)
+```
+Background: bg-slate-700 (connected) / bg-slate-500 (disconnected)
+Border: border-2 border-slate-600
+```
+
+### Card Pile (Last Played)
+```
+Background: bg-white
+Border: border-2 border-slate-200
+Shadow: shadow-2xl
+Size: w-28 h-40 md:w-36 md:h-52
+```
+
+### Player Connection Status
+```
+Connected: bg-green-500 indicator
+Disconnected: bg-red-500 indicator + opacity-50 grayscale on hand
+```
+
+### Results Overlay
+```
+Backdrop: bg-background/95 (95% opaque)
+Played cards: bg-slate-200 border-slate-300 text-slate-600
+Remaining cards: bg-white border-primary/30 text-primary
+Win action button: bg-green-500 hover:bg-green-600
+Fail action button: bg-red-500 hover:bg-red-600
+```
+
 ---
 
 ## Responsive Breakpoints
