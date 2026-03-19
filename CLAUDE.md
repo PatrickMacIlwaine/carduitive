@@ -2,6 +2,8 @@
 
 This file governs how Claude assists with this codebase. Follow these principles in every session.
 
+**Never add `Co-Authored-By` lines to commit messages.**
+
 ---
 
 ## Code Quality Standards
