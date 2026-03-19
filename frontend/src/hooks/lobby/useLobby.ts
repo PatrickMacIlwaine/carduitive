@@ -14,10 +14,8 @@ interface UseLobbyReturn {
   createLobby: (playerName: string) => Promise<boolean>
   leaveLobby: () => void
   sendChatMessage: (message: string) => void
-  startGame: () => Promise<boolean>
-  playCard: (card: number) => Promise<boolean>
-  advanceLevel: () => Promise<boolean>
-  restartLevel: () => Promise<boolean>
+  startGame: (gameType: string, config: Record<string, unknown>) => Promise<boolean>
+  sendGameAction: (action: string, data?: Record<string, unknown>) => Promise<boolean>
 }
 
 export function useLobby(lobbyCode: string): UseLobbyReturn {
@@ -459,19 +457,16 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     }))
   }, [])
 
-  // Start game (host only)
-  const startGame = useCallback(async (): Promise<boolean> => {
+  // Start game (host only) — game type and config provided by the game-specific layer
+  const startGame = useCallback(async (gameType: string, config: Record<string, unknown>): Promise<boolean> => {
     try {
       setIsStarting(true)
-      
+
       const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ 
-          game_type: 'classic',
-          config: { deck_size: 100, timing_mode: 'relaxed' }
-        })
+        body: JSON.stringify({ game_type: gameType, config })
       })
 
       if (!res.ok) {
@@ -483,7 +478,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
 
       const data = await res.json()
       console.log('Game start response:', data)
-      
+
       // Countdown will be handled via WebSocket messages
       return true
     } catch (err) {
@@ -494,108 +489,37 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     }
   }, [lobbyCode])
 
-  // Play a card
-  const playCard = useCallback(async (card: number): Promise<boolean> => {
+  // Generic game action — used by game-mode-specific hooks (e.g. useClassicGame)
+  const sendGameAction = useCallback(async (action: string, data: Record<string, unknown> = {}): Promise<boolean> => {
     try {
       const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ action: 'play', data: { card } })
+        body: JSON.stringify({ action, data })
       })
 
       if (!res.ok) {
         const errorData = await res.json()
-        console.error('Error playing card:', errorData)
+        setError(errorData.detail || `Action failed: ${action}`)
         return false
       }
 
-      const data = await res.json()
-      console.log('Play card result:', data)
-      
-      // Update lobby with new game state (server returns my_hand in response)
+      const responseData = await res.json()
+
       setLobby(prev => {
         if (!prev) return prev
         return {
           ...prev,
-          game_state: data
+          game_state: responseData,
+          ...(responseData.level !== undefined ? { current_level: responseData.level } : {})
         }
       })
-      
+
       return true
     } catch (err) {
-      console.error('Error playing card:', err)
-      return false
-    }
-  }, [lobbyCode])
-
-  // Advance to next level
-  const advanceLevel = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ action: 'advance', data: {} })
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        console.error('Error advancing level:', errorData)
-        return false
-      }
-
-      const data = await res.json()
-      console.log('Advance result:', data)
-      
-      // Update lobby with new game state (server returns my_hand in response)
-      setLobby(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          game_state: data,
-          current_level: data.level
-        }
-      })
-      
-      return true
-    } catch (err) {
-      console.error('Error advancing level:', err)
-      return false
-    }
-  }, [lobbyCode])
-
-  // Restart current level
-  const restartLevel = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ action: 'restart', data: {} })
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        console.error('Error restarting level:', errorData)
-        return false
-      }
-
-      const data = await res.json()
-      console.log('Restart result:', data)
-      
-      // Update lobby with new game state (server returns my_hand in response)
-      setLobby(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          game_state: data
-        }
-      })
-      
-      return true
-    } catch (err) {
-      console.error('Error restarting level:', err)
+      console.error(`Error on game action '${action}':`, err)
+      setError(`Action failed: ${action}`)
       return false
     }
   }, [lobbyCode])
@@ -642,8 +566,6 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     leaveLobby,
     sendChatMessage,
     startGame,
-    playCard,
-    advanceLevel,
-    restartLevel
+    sendGameAction,
   }
 }
