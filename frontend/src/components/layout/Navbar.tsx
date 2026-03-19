@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Sun, Moon, Trophy, Home, Sparkles, User, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -5,17 +6,39 @@ import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { API_URL } from '@/contexts/AuthContext'
+import { NavigationWarningModal } from './NavigationWarningModal'
 
 export function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { resolvedTheme, toggleTheme } = useTheme()
   const { user, isLoading, logout, isAuthenticated } = useAuth()
+  const [pendingPath, setPendingPath] = useState<string | null>(null)
+
+  const isInLobby = location.pathname.startsWith('/lobby/')
 
   const navItems = [
     { path: '/home', label: 'Home', icon: Home },
     { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   ]
+
+  const handleNavClick = (path: string) => (e: React.MouseEvent) => {
+    if (isInLobby) {
+      e.preventDefault()
+      setPendingPath(path)
+    }
+  }
+
+  const handleModalConfirm = () => {
+    if (pendingPath) {
+      navigate(pendingPath)
+    }
+    setPendingPath(null)
+  }
+
+  const handleModalCancel = () => {
+    setPendingPath(null)
+  }
 
   const handleLogin = () => {
     window.location.href = `${API_URL}/auth/google/login?redirect=/home`
@@ -27,11 +50,17 @@ export function Navbar() {
   }
 
   return (
+    <>
+    <NavigationWarningModal
+      isOpen={pendingPath !== null}
+      onConfirm={handleModalConfirm}
+      onCancel={handleModalCancel}
+    />
     <nav className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           {/* Logo */}
-          <Link to="/home" className="flex items-center gap-2 group">
+          <Link to="/home" onClick={handleNavClick('/home')} className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-carduitive-dark to-carduitive-teal flex items-center justify-center group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
@@ -50,6 +79,7 @@ export function Navbar() {
                 <Link
                   key={item.path}
                   to={item.path}
+                  onClick={handleNavClick(item.path)}
                   className={cn(
                     'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                     isActive
@@ -148,5 +178,6 @@ export function Navbar() {
         </div>
       </div>
     </nav>
+    </>
   )
 }

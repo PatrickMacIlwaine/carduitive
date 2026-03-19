@@ -1,7 +1,19 @@
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Crown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+interface PlayHistoryEntry {
+  player_id: string
+  player_name: string
+  card: number
+}
+
+interface FailureInfo {
+  player_id: string
+  player_name: string
+  card_played: number
+  card_expected: number
+}
 
 interface GameResultsProps {
   gameState: {
@@ -11,11 +23,18 @@ interface GameResultsProps {
       [playerId: string]: {
         card_count: number
         cards_played: number[]
+        cards?: number[]
       }
     }
     my_hand?: {
       cards: number[]
       cards_played: number[]
+    }
+    progression?: {
+      available_actions: string[]
+      message: string
+      play_history?: PlayHistoryEntry[]
+      failure?: FailureInfo
     }
   }
   players: Array<{
@@ -28,96 +47,78 @@ interface GameResultsProps {
   onRestart: () => void
 }
 
-interface PlayerCardRowProps {
+function TimelineCard({ value, playerName, isYou, variant = 'default', delay = 0 }: {
+  value: number
   playerName: string
-  cardsPlayed: number[]
-  remainingCards: number[]
-  remainingCount: number
-  isCurrentPlayer: boolean
-  isHost?: boolean
-}
-
-function PlayerCardRow({ 
-  playerName, 
-  cardsPlayed, 
-  remainingCards,
-  remainingCount,
-  isCurrentPlayer,
-  isHost 
-}: PlayerCardRowProps) {
+  isYou: boolean
+  variant?: 'default' | 'error' | 'expected'
+  delay?: number
+}) {
   return (
-    <motion.div 
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      className={cn(
-        "flex items-center gap-4 p-3 rounded-lg",
-        isCurrentPlayer && "bg-primary/10 border border-primary/30"
-      )}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay }}
+      className="flex flex-col items-center gap-1"
     >
-      <div className="w-32 flex-shrink-0">
-        <p className="font-medium truncate flex items-center gap-1">
-          {playerName}
-          {isHost && <Crown className="w-4 h-4 text-yellow-500" />}
-        </p>
-        {isCurrentPlayer && (
-          <p className="text-xs text-primary">You</p>
+      <div
+        className={cn(
+          "w-11 h-16 rounded-lg border-2 flex items-center justify-center text-base font-bold shadow-sm",
+          variant === 'default' && "bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200",
+          variant === 'error' && "bg-red-100 dark:bg-red-950 border-red-400 dark:border-red-700 text-red-700 dark:text-red-400",
+          variant === 'expected' && "bg-green-100 dark:bg-green-950 border-green-400 dark:border-green-700 text-green-700 dark:text-green-400"
         )}
+      >
+        {value}
       </div>
-      
-      <div className="flex-1 flex flex-wrap gap-1">
-        {cardsPlayed.length > 0 ? (
-          cardsPlayed.map((card, idx) => (
-            <div
-              key={`played-${idx}`}
-              className="w-10 h-14 rounded bg-slate-200 border border-slate-300 flex items-center justify-center text-sm font-bold text-slate-600"
-            >
-              {card}
-            </div>
-          ))
-        ) : (
-          <span className="text-sm text-muted-foreground">No cards played</span>
-        )}
-      </div>
-      
-      {remainingCards.length > 0 ? (
-        <>
-          <div className="text-muted-foreground">→</div>
-          <div className="flex flex-wrap gap-1">
-            {remainingCards.map((card, idx) => (
-              <div
-                key={`remaining-${idx}`}
-                className="w-10 h-14 rounded bg-white border-2 border-primary/30 flex items-center justify-center text-sm font-bold text-primary"
-              >
-                {card}
-              </div>
-            ))}
-          </div>
-        </>
-      ) : remainingCount > 0 ? (
-        <>
-          <div className="text-muted-foreground">→</div>
-          <div className="text-sm text-muted-foreground">
-            {remainingCount} card{remainingCount !== 1 ? 's' : ''} remaining
-          </div>
-        </>
-      ) : null}
-      
-      <div className="w-16 text-right text-sm text-muted-foreground">
-        {cardsPlayed.length + (remainingCards.length || remainingCount)} total
-      </div>
+      <span className={cn(
+        "text-[10px] truncate max-w-[3.5rem] text-center",
+        isYou ? "text-primary font-medium" : "text-muted-foreground"
+      )}>
+        {isYou ? 'You' : playerName}
+      </span>
     </motion.div>
   )
 }
 
-export function GameResults({ 
-  gameState, 
-  players, 
+function TimelineArrow({ delay = 0 }: { delay?: number }) {
+  return (
+    <motion.span
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay }}
+      className="text-muted-foreground text-xs self-start mt-5"
+    >
+      →
+    </motion.span>
+  )
+}
+
+export function GameResults({
+  gameState,
+  players,
   currentPlayerId,
-  onAdvance, 
-  onRestart 
+  onAdvance,
+  onRestart
 }: GameResultsProps) {
-  const { status, level, player_hands, my_hand } = gameState
+  const { status, level, player_hands, my_hand, progression } = gameState
   const isWin = status === 'success'
+  const failure = progression?.failure
+  const playHistory = progression?.play_history ?? []
+
+  // On failure: collect remaining cards per player for display after the timeline
+  const remainingByPlayer: { name: string; isYou: boolean; cards: number[] }[] = []
+  if (!isWin) {
+    for (const player of players) {
+      const handInfo = player_hands[player.id]
+      if (!handInfo) continue
+      const isYou = player.id === currentPlayerId
+      const cards = isYou && my_hand ? my_hand.cards : (handInfo.cards ?? [])
+      if (cards.length > 0) {
+        remainingByPlayer.push({ name: player.name, isYou, cards })
+      }
+    }
+  }
 
   return (
     <motion.div
@@ -126,7 +127,7 @@ export function GameResults({
       className="absolute inset-0 bg-background/95 flex items-center justify-center z-20 p-4"
     >
       <Card className="w-full max-w-2xl max-h-[80vh] overflow-auto">
-        <CardHeader className="text-center">
+        <CardHeader className="text-center pb-3">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -138,43 +139,105 @@ export function GameResults({
             )}>
               {isWin ? '🎉 Level Complete!' : '💥 Level Failed'}
             </CardTitle>
-            <p className="text-muted-foreground">
-              Level {level} - All Players' Cards
-            </p>
+            <p className="text-muted-foreground">Level {level}</p>
           </motion.div>
         </CardHeader>
-        
-        <CardContent className="space-y-2">
-          <div className="text-sm text-muted-foreground mb-4">
-            <p className="font-medium mb-2">Cards played → Remaining in hand</p>
-          </div>
-          
-          {players.map((player, index) => {
-            const handInfo = player_hands[player.id] || { card_count: 0, cards_played: [] }
-            const isCurrentPlayer = player.id === currentPlayerId
-            
-            const remainingCards = isCurrentPlayer && my_hand ? my_hand.cards : []
-            
-            return (
-              <motion.div
-                key={player.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <PlayerCardRow
-                  playerName={player.name}
-                  cardsPlayed={handInfo.cards_played}
-                  remainingCards={remainingCards}
-                  remainingCount={handInfo.card_count}
-                  isCurrentPlayer={isCurrentPlayer}
-                  isHost={player.is_host}
-                />
-              </motion.div>
-            )
-          })}
-          
-          <div className="flex justify-center gap-4 mt-6 pt-4 border-t">
+
+        <CardContent className="space-y-5">
+          {/* What went wrong (failed only) */}
+          {!isWin && failure && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-4"
+            >
+              <p className="font-medium text-red-700 dark:text-red-400 mb-2">
+                {failure.player_id === currentPlayerId ? 'You' : failure.player_name} played{' '}
+                <span className="font-bold">{failure.card_played}</span> — should have been{' '}
+                <span className="font-bold">{failure.card_expected}</span>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {failure.card_expected} was held by{' '}
+                {/* Find who held the expected card */}
+                {(() => {
+                  for (const player of players) {
+                    const hand = player_hands[player.id]
+                    if (hand?.cards?.includes(failure.card_expected)) {
+                      return player.id === currentPlayerId ? 'you' : player.name
+                    }
+                  }
+                  return 'another player'
+                })()}
+              </p>
+            </motion.div>
+          )}
+
+          {/* Timeline */}
+          {playHistory.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-3">
+                {isWin ? 'Play order' : 'Play history'}
+              </p>
+              <div className="flex flex-wrap items-start gap-1.5">
+                {playHistory.map((play, idx) => (
+                  <div key={idx} className="flex items-start gap-1.5">
+                    {idx > 0 && <TimelineArrow delay={idx * 0.04} />}
+                    <TimelineCard
+                      value={play.card}
+                      playerName={play.player_name}
+                      isYou={play.player_id === currentPlayerId}
+                      delay={idx * 0.04}
+                    />
+                  </div>
+                ))}
+                {/* Failed card at the end */}
+                {failure && (
+                  <div className="flex items-start gap-1.5">
+                    {playHistory.length > 0 && <TimelineArrow delay={playHistory.length * 0.04} />}
+                    <TimelineCard
+                      value={failure.card_played}
+                      playerName={failure.player_name}
+                      isYou={failure.player_id === currentPlayerId}
+                      variant="error"
+                      delay={playHistory.length * 0.04}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Remaining cards on failure */}
+          {!isWin && remainingByPlayer.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-2">Cards remaining</p>
+              <div className="flex flex-wrap gap-4">
+                {remainingByPlayer.map((entry, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-sm",
+                      entry.isYou ? "text-primary font-medium" : "text-muted-foreground"
+                    )}>
+                      {entry.isYou ? 'You' : entry.name}:
+                    </span>
+                    <div className="flex gap-1">
+                      {entry.cards.map((card, ci) => (
+                        <div
+                          key={ci}
+                          className="w-9 h-13 rounded border-2 bg-white dark:bg-slate-800 border-primary/30 flex items-center justify-center text-sm font-bold text-primary"
+                        >
+                          {card}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-center gap-4 pt-4 border-t">
             {isWin ? (
               <motion.button
                 whileHover={{ scale: 1.05 }}
