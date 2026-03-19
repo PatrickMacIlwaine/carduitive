@@ -532,23 +532,35 @@ async def game_action(
     if not player:
         raise HTTPException(status_code=403, detail="Player not found in lobby")
     
+    # For level transitions (advance/restart), run countdown first
+    if request.action in ["advance", "restart"]:
+        for count in [3, 2, 1]:
+            await lobby_manager_ws.broadcast_to_lobby(
+                json.dumps({
+                    "type": "countdown",
+                    "data": {"count": count, "message": f"Level starting in {count}..."}
+                }),
+                code
+            )
+            await asyncio.sleep(1)
+
     # Handle the action
     result = lobby_manager.handle_game_action(code, player.id, request.action, request.data)
-    
+
     if not result:
         raise HTTPException(status_code=400, detail="Invalid action")
-    
+
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
-    
+
     # Get player-specific state after action (includes private cards for restart/advance)
     player_specific_state = lobby_manager.get_game_state(code, player.id)
     if player_specific_state:
         result = player_specific_state
-    
+
     # Broadcast game state update
     public_state = lobby_manager.get_game_state(code)
-    
+
     # Determine message type based on action
     if request.action in ["advance", "restart"]:
         # For level transitions, tell all clients to fetch new state
@@ -569,14 +581,14 @@ async def game_action(
             "type": message_type,
             "data": public_state
         }
-    
+
     asyncio.create_task(
         lobby_manager_ws.broadcast_to_lobby(
             json.dumps(broadcast_data),
             code
         )
     )
-    
+
     return result
 
 
