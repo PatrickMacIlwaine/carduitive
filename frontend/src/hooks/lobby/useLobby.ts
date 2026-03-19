@@ -176,6 +176,9 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
           case 'level_started':
             // New level started (advance or restart)
             console.log('Level started:', message.data)
+            setCountdown(null)
+            setIsStarting(false)
+
             if (message.data && 'level' in message.data) {
               const levelData = message.data as { level: number; status: string; action: string }
               // Update lobby with new level info
@@ -192,9 +195,8 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
                   }
                 }
               })
-              
+
               // Fetch new game state with new cards for this level
-              // Use setTimeout to ensure backend has processed the level transition
               setTimeout(() => {
                 console.log('Fetching new game state for level', levelData.level)
                 fetchLobby()
@@ -286,7 +288,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
             }
             setCountdown(null)
             setIsStarting(false)
-            
+
             // Fetch full game state with private hand info
             fetchLobby()
             break
