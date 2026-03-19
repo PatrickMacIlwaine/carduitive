@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
 import json
+import asyncio
 
 from app.database import engine, Base
 from app.config import get_settings
@@ -17,7 +18,9 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    heartbeat_task = asyncio.create_task(lobby_manager_ws.heartbeat(interval=10))
     yield
+    heartbeat_task.cancel()
 
 
 app = FastAPI(
