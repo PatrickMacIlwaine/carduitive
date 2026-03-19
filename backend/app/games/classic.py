@@ -296,19 +296,67 @@ class ClassicCarduitive(Game):
         }
         
         # Add progression controls when game is not playing
+        if self.status in (GameStatus.SUCCESS, GameStatus.FAILED):
+            player_name_map = {p.id: p.name for p in self.players}
+
+            # Only include actions from the current level (after the last "start")
+            current_level_actions = self.actions
+            for i in range(len(self.actions) - 1, -1, -1):
+                if self.actions[i].type == "start":
+                    current_level_actions = self.actions[i + 1:]
+                    break
+
+            play_history = [
+                {
+                    "player_id": a.player_id,
+                    "player_name": player_name_map.get(a.player_id, "Unknown"),
+                    "card": a.data["card"],
+                }
+                for a in current_level_actions
+                if a.type == "play"
+            ]
+
         if self.status == GameStatus.SUCCESS:
             state["progression"] = {
                 "available_actions": ["advance"],
                 "message": f"🎉 Level {self.level} complete! Ready for Level {self.level + 1}?",
                 "next_level": self.level + 1,
+                "play_history": play_history,
             }
         elif self.status == GameStatus.FAILED:
+
+            # Find the failure action
+            fail_action = next(
+                (a for a in reversed(self.actions) if a.type == "fail"),
+                None,
+            )
+            failure = None
+            if fail_action:
+                failure = {
+                    "player_id": fail_action.player_id,
+                    "player_name": player_name_map.get(fail_action.player_id, "Unknown"),
+                    "card_played": fail_action.data["card"],
+                    "card_expected": fail_action.data["expected"],
+                }
+
+            # Reveal all players' remaining cards on failure
+            state["player_hands"] = {
+                player_id: {
+                    "card_count": hand.card_count,
+                    "cards_played": hand.cards_played,
+                    "cards": hand.cards,
+                }
+                for player_id, hand in self.player_hands.items()
+            }
+
             state["progression"] = {
                 "available_actions": ["restart"],
                 "message": f"💥 Wrong card! Try Level {self.level} again?",
                 "restart_level": self.level,
+                "play_history": play_history,
+                "failure": failure,
             }
-        
+
         return state
     
     def get_player_state(self, player_id: str) -> Dict[str, Any]:
