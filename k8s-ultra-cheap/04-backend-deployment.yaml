@@ -31,7 +31,7 @@ spec:
         - name: backend
           image: us-east1-docker.pkg.dev/PROJECT_ID/carduitive/carduitive-backend:latest
           ports:
-            - containerPort: 8000
+            - containerPort: 80
           env:
             # 1. We pull the DB credentials from the secret you used for the DB
             - name: POSTGRES_USER
@@ -81,12 +81,12 @@ spec:
           readinessProbe:
             httpGet:
               path: /health
-              port: 8000
+              port: 80
             initialDelaySeconds: 15  # Increased slightly for e2-small
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
-              port: 8000
+              port: 80
             initialDelaySeconds: 30
             periodSeconds: 20
