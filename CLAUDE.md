@@ -130,6 +130,8 @@ docs: update SPEC with game engine architecture
 infra: use hostNetwork for frontend to bind port 80
 ```
 
+**Before creating a PR:** Always `git fetch origin` and check `git status` / `git log` to understand the current branch state, what's already been merged, and what commits will be included. Do not assume — verify.
+
 **PR checklist before merging:**
 - [ ] No new `any` types introduced
 - [ ] New game logic has backend tests
