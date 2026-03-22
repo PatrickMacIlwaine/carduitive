@@ -6,7 +6,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8000:80"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/carduitive
     depends_on:
@@ -14,7 +14,7 @@ services:
     command: >
       sh -c "
       python init_db.py &&
-      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
       "
 
   frontend:
