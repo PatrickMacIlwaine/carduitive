@@ -9,7 +9,7 @@ import time
 import sys
 from typing import Dict, Optional
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:80"
 
 # Generate unique lobby codes to avoid conflicts
 test_counter = int(time.time())
@@ -762,6 +762,6 @@ if __name__ == "__main__":
         sys.exit(exit_code)
     except requests.exceptions.ConnectionError:
         print("\n❌ ERROR: Cannot connect to backend!")
-        print("Make sure the backend is running on http://localhost:8000")
+        print("Make sure the backend is running on http://localhost:80")
         sys.exit(1)
 

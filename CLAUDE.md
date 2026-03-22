@@ -4,6 +4,8 @@ This file governs how Claude assists with this codebase. Follow these principles
 
 **Never add `Co-Authored-By` lines to commit messages.**
 
+**Never add "Generated with Claude Code" lines to PR descriptions.**
+
 ---
 
 ## Code Quality Standards
