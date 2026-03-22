@@ -8,7 +8,7 @@ import requests
 import time
 from collections import defaultdict
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:80"
 
 
 def test_random_dealing_from_full_deck():
@@ -303,5 +303,5 @@ if __name__ == "__main__":
         exit(0 if success else 1)
     except requests.exceptions.ConnectionError:
         print("\n❌ ERROR: Cannot connect to backend!")
-        print("Make sure the backend is running on http://localhost:8000")
+        print("Make sure the backend is running on http://localhost:80")
         exit(1)
