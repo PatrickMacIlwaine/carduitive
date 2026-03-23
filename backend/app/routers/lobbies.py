@@ -135,7 +135,7 @@ class UpdateConfigRequest(BaseModel):
 VALID_CONFIG_VALUES: Dict[str, list] = {
     "failure_mode": ["forgiving", "hardcore"],
     "cards_sorted": [True, False],
-    "timer_seconds": [None, 15, 30, 60],
+    "timer_seconds": [None, 5, 10, 15],
 }
 
 

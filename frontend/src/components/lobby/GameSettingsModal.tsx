@@ -93,13 +93,27 @@ export function GameSettingsModal({ isOpen, onClose, config, onConfigChange, isH
             </div>
           </div>
 
-          {/* Timer indicator */}
-          {timerSeconds != null && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
-              <Timer className="w-4 h-4 text-orange-500 flex-shrink-0" />
-              <span className="text-sm text-orange-700 dark:text-orange-400">{timerSeconds}s per level</span>
+          {/* Timer */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Timer</label>
+            <div className="grid grid-cols-4 gap-2">
+              {([null, 5, 10, 15] as const).map((value) => (
+                <button
+                  key={String(value)}
+                  disabled={!isHost}
+                  onClick={() => onConfigChange({ timer_seconds: value })}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-colors ${
+                    timerSeconds === value
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-muted hover:border-muted-foreground/30'
+                  } ${!isHost ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <Timer className="w-5 h-5" />
+                  <span className="font-medium text-xs">{value === null ? 'Off' : `${value}s`}</span>
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* On Failure */}
           <div>
