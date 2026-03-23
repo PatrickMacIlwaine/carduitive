@@ -358,7 +358,7 @@ class ClassicCarduitive(Game):
             if restart_level == self.level:
                 restart_msg = f"💥 Wrong card! Try Level {self.level} again?"
             else:
-                restart_msg = f"💥 Wrong card! Back to Level 1!"
+                restart_msg = "💥 Wrong card! Back to Level 1!"
 
             state["progression"] = {
                 "available_actions": ["restart"],
