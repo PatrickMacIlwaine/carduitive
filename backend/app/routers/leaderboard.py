@@ -16,6 +16,7 @@ class LeaderboardEntryResponse(BaseModel):
     group_name: str
     score: int
     games_played: int
+    game_config: Optional[dict] = None
     updated_at: datetime
 
     class Config:
@@ -61,8 +62,9 @@ async def create_leaderboard_entry(
     existing = result.scalar_one_or_none()
     
     if existing:
-        # Update existing entry - add to score and games played
-        existing.score += entry.score
+        # Update existing entry — keep highest score, increment games played
+        if entry.score > existing.score:
+            existing.score = entry.score
         existing.games_played += entry.games_played
         await db.commit()
         await db.refresh(existing)

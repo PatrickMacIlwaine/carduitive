@@ -35,6 +35,7 @@ class Lobby:
     messages: List[ChatMessage] = field(default_factory=list)
     status: str = "waiting"  # waiting, starting, playing, ended
     game_type: str = "classic"  # Type of game to play
+    game_config: Dict[str, Any] = field(default_factory=dict)  # Game settings chosen before start
     game: Any = None  # Game instance (populated when game starts)
     current_level: int = 1  # Current game level
     countdown: Optional[int] = None  # Countdown value (3, 2, 1, None)
@@ -107,6 +108,7 @@ class Lobby:
             "code": self.code,
             "status": self.status,
             "game_type": self.game_type,
+            "game_config": self.game_config,
             "player_count": self.player_count,
             "current_level": self.current_level,
             "countdown": self.countdown,
@@ -281,9 +283,10 @@ class LobbyManager:
         lobby.game = game
         lobby.game_type = game_type
         
-        # Start the game (this deals cards)
+        # Start the game (this deals cards) — merge lobby config with request config
         try:
-            game_state = game.start_game(config)
+            merged_config = {**config, **lobby.game_config}
+            game_state = game.start_game(merged_config)
             lobby.status = "playing"
             lobby.updated_at = datetime.now()
             return game_state
