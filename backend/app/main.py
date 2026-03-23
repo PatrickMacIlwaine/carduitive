@@ -5,8 +5,10 @@ from contextlib import asynccontextmanager
 import json
 import asyncio
 
+from sqlalchemy import text
 from app.database import engine, Base
 from app.config import get_settings
+from init_db import MIGRATIONS
 from app.routers import counter, leaderboard, lobbies, auth
 from app.websocket import lobby_manager_ws
 from app.lobby_manager import lobby_manager
@@ -18,6 +20,8 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for migration in MIGRATIONS:
+            await conn.execute(text(migration))
     heartbeat_task = asyncio.create_task(lobby_manager_ws.heartbeat(interval=10))
     yield
     heartbeat_task.cancel()
