@@ -32,6 +32,8 @@ class ClassicCarduitive(Game):
         "min_card_value": 1,
         "max_card_value": 100,
         "timing_mode": "relaxed",  # relaxed, timed, speedrun
+        "failure_mode": "forgiving",  # forgiving (restart current level), hardcore (restart at level 1)
+        "cards_sorted": True,  # True = hand sorted ascending, False = random order
         "allow_undo": False,
         "strict_order": True,
     }
@@ -111,7 +113,8 @@ class ClassicCarduitive(Game):
                 if card_index < len(full_deck):
                     hand.cards.append(full_deck[card_index])
                     card_index += 1
-            hand.cards.sort()  # Sort for easier viewing
+            if self.config.get("cards_sorted", True):
+                hand.cards.sort()
             self.player_hands[player.id] = hand
         
         # Store remaining deck for future levels
@@ -171,13 +174,15 @@ class ClassicCarduitive(Game):
         return self.start_game(self.config)
     
     def _handle_restart(self) -> Dict[str, Any]:
-        """Restart current level after failure"""
+        """Restart after failure — level depends on failure_mode config"""
         if self.status != GameStatus.FAILED:
             return {"error": "Can only restart after level failure"}
-        
+
+        if self.config.get("failure_mode") == "hardcore":
+            self.level = 1
+
         self.log_action("restart", "system", {"level": self.level})
-        
-        # Restart game at same level
+
         return self.start_game(self.config)
     
     def _handle_play(self, player_id: str, card: Optional[int]) -> Dict[str, Any]:
@@ -349,10 +354,16 @@ class ClassicCarduitive(Game):
                 for player_id, hand in self.player_hands.items()
             }
 
+            restart_level = 1 if self.config.get("failure_mode") == "hardcore" else self.level
+            if restart_level == self.level:
+                restart_msg = f"💥 Wrong card! Try Level {self.level} again?"
+            else:
+                restart_msg = f"💥 Wrong card! Back to Level 1!"
+
             state["progression"] = {
                 "available_actions": ["restart"],
-                "message": f"💥 Wrong card! Try Level {self.level} again?",
-                "restart_level": self.level,
+                "message": restart_msg,
+                "restart_level": restart_level,
                 "play_history": play_history,
                 "failure": failure,
             }

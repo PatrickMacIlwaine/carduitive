@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Trophy } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
@@ -33,8 +34,15 @@ interface GameResultsProps {
     progression?: {
       available_actions: string[]
       message: string
+      restart_level?: number
       play_history?: PlayHistoryEntry[]
       failure?: FailureInfo
+    }
+    leaderboard?: {
+      saved: boolean
+      is_new_high: boolean
+      score: number
+      group_name: string
     }
   }
   players: Array<{
@@ -101,10 +109,11 @@ export function GameResults({
   onAdvance,
   onRestart
 }: GameResultsProps) {
-  const { status, level, player_hands, my_hand, progression } = gameState
+  const { status, level, player_hands, my_hand, progression, leaderboard } = gameState
   const isWin = status === 'success'
   const failure = progression?.failure
   const playHistory = progression?.play_history ?? []
+  const restartLevel = progression?.restart_level ?? level
 
   // On failure: collect remaining cards per player for display after the timeline
   const remainingByPlayer: { name: string; isYou: boolean; cards: number[] }[] = []
@@ -236,6 +245,30 @@ export function GameResults({
             </div>
           )}
 
+          {/* Leaderboard score saved */}
+          {leaderboard?.saved && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={cn(
+                "rounded-lg border p-4 text-center",
+                leaderboard.is_new_high
+                  ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-300 dark:border-yellow-800"
+                  : "bg-primary/5 border-primary/20"
+              )}
+            >
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <Trophy className={cn("w-5 h-5", leaderboard.is_new_high ? "text-yellow-500" : "text-primary")} />
+                <span className="font-semibold">
+                  {leaderboard.is_new_high ? 'New High Score!' : 'Score Saved'}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Level {leaderboard.score} — {leaderboard.group_name}
+              </p>
+            </motion.div>
+          )}
+
           {/* Actions */}
           <div className="flex justify-center gap-4 pt-4 border-t">
             {isWin ? (
@@ -254,7 +287,9 @@ export function GameResults({
                 onClick={onRestart}
                 className="px-8 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium shadow-lg"
               >
-                Try Level {level} Again
+                {restartLevel === level
+                  ? `Try Level ${level} Again`
+                  : `Back to Level ${restartLevel}`}
               </motion.button>
             )}
           </div>

@@ -19,6 +19,11 @@ export interface CurrentPlayer {
   user_id?: number
 }
 
+export interface GameConfig {
+  failure_mode?: 'forgiving' | 'hardcore'
+  cards_sorted?: boolean
+}
+
 export interface Lobby {
   code: string
   status: 'waiting' | 'starting' | 'playing' | 'ended'
@@ -26,6 +31,7 @@ export interface Lobby {
   players: Player[]
   you?: CurrentPlayer
   current_level?: number
+  game_config?: GameConfig
   game_state?: any  // Game state when playing
   created_at?: string
   updated_at?: string
@@ -41,7 +47,7 @@ export interface ChatMessage {
 }
 
 export interface WebSocketMessage {
-  type: 'player_joined' | 'player_left' | 'lobby_update' | 'chat' | 'connected' | 'connection_update' | 'countdown' | 'game_started' | 'game_update' | 'level_started' | 'error'
+  type: 'player_joined' | 'player_left' | 'lobby_update' | 'chat' | 'connected' | 'connection_update' | 'countdown' | 'game_started' | 'game_update' | 'level_started' | 'config_update' | 'error'
   data?: Lobby | ChatMessage | { messages: ChatMessage[]; connected_players?: string[]; count?: number; game_state?: any; game_type?: string; level?: number; status?: string; action?: string }
   player_name?: string
   message?: string

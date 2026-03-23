@@ -1,17 +1,79 @@
-from fastapi import APIRouter, HTTPException, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Optional, List, Dict, Any
 import json
 import asyncio
+import logging
 from datetime import datetime
 from jose import jwt
 
-from app.lobby_manager import lobby_manager
+from app.lobby_manager import lobby_manager, Lobby
 from app.websocket import lobby_manager_ws
 from app.config import get_settings
+from app.database import get_db
+from app.models import LeaderboardEntry
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 router = APIRouter(prefix="/api/lobbies", tags=["lobbies"])
+
+
+async def _maybe_save_score(lobby: Lobby, db: AsyncSession) -> Optional[Dict[str, Any]]:
+    """Save score to leaderboard if hardcore mode and all players authenticated."""
+    if not lobby.game:
+        return None
+
+    config = lobby.game.config
+    if config.get("failure_mode") != "hardcore":
+        return None
+
+    if len(lobby.players) < 2:
+        return None
+
+    if not all(p.is_authenticated for p in lobby.players):
+        return None
+
+    max_level = lobby.game.max_level_reached
+    if max_level < 1:
+        return None
+
+    # Group name = sorted player names
+    group_name = ", ".join(sorted(p.name for p in lobby.players))
+
+    # Settings to store with the score
+    saved_config = {
+        "failure_mode": config.get("failure_mode", "forgiving"),
+        "cards_sorted": config.get("cards_sorted", True),
+    }
+
+    result = await db.execute(
+        select(LeaderboardEntry).where(LeaderboardEntry.group_name == group_name)
+    )
+    existing = result.scalar_one_or_none()
+
+    is_new_high = False
+    if existing:
+        if max_level > existing.score:
+            existing.score = max_level
+            existing.game_config = saved_config
+            is_new_high = True
+        existing.games_played += 1
+        await db.commit()
+    else:
+        new_entry = LeaderboardEntry(
+            group_name=group_name,
+            score=max_level,
+            games_played=1,
+            game_config=saved_config
+        )
+        db.add(new_entry)
+        await db.commit()
+        is_new_high = True
+
+    return {"saved": True, "is_new_high": is_new_high, "score": max_level, "group_name": group_name}
 
 
 def get_current_user_from_token(request: Request) -> dict | None:
@@ -63,6 +125,16 @@ class ChatMessageRequest(BaseModel):
 class StartGameRequest(BaseModel):
     game_type: str = "classic"
     config: Dict[str, Any] = {}
+
+
+class UpdateConfigRequest(BaseModel):
+    config: Dict[str, Any]
+
+
+VALID_CONFIG_VALUES: Dict[str, list] = {
+    "failure_mode": ["forgiving", "hardcore"],
+    "cards_sorted": [True, False],
+}
 
 
 class GameActionRequest(BaseModel):
@@ -413,6 +485,58 @@ async def delete_lobby(
     return {"message": "Lobby deleted successfully"}
 
 
+@router.put("/{code}/config")
+async def update_config(
+    code: str,
+    request: UpdateConfigRequest,
+    http_request: Request
+):
+    """Update game config for a lobby (host only, before game starts)."""
+    cookie_name = f"lobby_{code}"
+    lobby_session = http_request.cookies.get(cookie_name)
+
+    lobby = lobby_manager.get_lobby(code)
+    if not lobby:
+        raise HTTPException(status_code=404, detail="Lobby not found")
+
+    if not lobby_session:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    player = lobby.get_player_by_session(lobby_session)
+    if not player or not player.is_host:
+        raise HTTPException(status_code=403, detail="Only host can change settings")
+
+    if lobby.status not in ["waiting", "starting"]:
+        raise HTTPException(status_code=400, detail="Cannot change settings while game is in progress")
+
+    # Validate config values
+    for key, value in request.config.items():
+        if key in VALID_CONFIG_VALUES and value not in VALID_CONFIG_VALUES[key]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid value for {key}: {value}. Must be one of {VALID_CONFIG_VALUES[key]}"
+            )
+
+    # Merge into lobby config
+    lobby.game_config.update(request.config)
+    lobby.updated_at = datetime.now()
+
+    # Broadcast config update to all players
+    asyncio.create_task(
+        lobby_manager_ws.broadcast_to_lobby(
+            json.dumps({
+                "type": "config_update",
+                "data": {
+                    "game_config": lobby.game_config
+                }
+            }),
+            code
+        )
+    )
+
+    return {"game_config": lobby.game_config}
+
+
 @router.post("/{code}/start")
 async def start_game(
     code: str,
@@ -514,7 +638,8 @@ async def start_game(
 async def game_action(
     code: str,
     request: GameActionRequest,
-    http_request: Request
+    http_request: Request,
+    db: AsyncSession = Depends(get_db)
 ):
     """Perform a game action (play card, pass, etc.)."""
     # Get session cookie dynamically
@@ -553,6 +678,14 @@ async def game_action(
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
 
+    # Save score to leaderboard on failure (hardcore mode, all authenticated)
+    leaderboard_result = None
+    if result.get("status") == "failed":
+        try:
+            leaderboard_result = await _maybe_save_score(lobby, db)
+        except Exception as e:
+            logger.error(f"Failed to save leaderboard score: {e}")
+
     # Get player-specific state after action (includes private cards for restart/advance)
     player_specific_state = lobby_manager.get_game_state(code, player.id)
     if player_specific_state:
@@ -579,7 +712,7 @@ async def game_action(
         message_type = "game_update"
         broadcast_data = {
             "type": message_type,
-            "data": public_state
+            "data": {**(public_state or {}), **({"leaderboard": leaderboard_result} if leaderboard_result else {})}
         }
 
     asyncio.create_task(
@@ -588,6 +721,9 @@ async def game_action(
             code
         )
     )
+
+    if leaderboard_result:
+        result["leaderboard"] = leaderboard_result
 
     return result
 
