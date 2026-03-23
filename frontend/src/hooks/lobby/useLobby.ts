@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { Lobby, ChatMessage, WebSocketMessage } from '@/types/lobby'
+import type { Lobby, ChatMessage, WebSocketMessage, GameConfig } from '@/types/lobby'
 import { API_URL } from '@/contexts/AuthContext'
 
 interface UseLobbyReturn {
@@ -16,6 +16,7 @@ interface UseLobbyReturn {
   sendChatMessage: (message: string) => void
   startGame: (gameType: string, config: Record<string, unknown>) => Promise<boolean>
   sendGameAction: (action: string, data?: Record<string, unknown>) => Promise<boolean>
+  updateConfig: (config: Record<string, unknown>) => Promise<boolean>
 }
 
 export function useLobby(lobbyCode: string): UseLobbyReturn {
@@ -204,6 +205,16 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
             }
             break
             
+          case 'config_update':
+            if (message.data && 'game_config' in message.data) {
+              const configData = message.data as unknown as { game_config: GameConfig }
+              setLobby(prev => {
+                if (!prev) return prev
+                return { ...prev, game_config: configData.game_config }
+              })
+            }
+            break
+
           case 'connection_update':
             // Update connection status for players
             if (message.connected_players) {
@@ -526,6 +537,30 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     }
   }, [lobbyCode])
 
+  // Update game config (host only)
+  const updateConfig = useCallback(async (config: Record<string, unknown>): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_URL}/lobbies/${lobbyCode}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ config })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        setError(errorData.detail || 'Failed to update config')
+        return false
+      }
+
+      return true
+    } catch (err) {
+      console.error('Error updating config:', err)
+      setError('Failed to update config')
+      return false
+    }
+  }, [lobbyCode])
+
   // Initial lobby check
   useEffect(() => {
     let mounted = true
@@ -569,5 +604,6 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     sendChatMessage,
     startGame,
     sendGameAction,
+    updateConfig,
   }
 }
