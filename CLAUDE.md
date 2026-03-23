@@ -151,6 +151,12 @@ Do not create a PR if any of these fail. Fix the issue first.
 
 ---
 
+## Database Migrations
+
+When adding a new column to an existing model in `backend/app/models.py`, you **must** also add a corresponding `ALTER TABLE` statement to the `MIGRATIONS` list in `backend/init_db.py`. Each migration must be idempotent (use `IF NOT EXISTS` / `IF EXISTS`). `create_all` only creates new tables — it does not add columns to existing ones.
+
+---
+
 ## Architecture Reminders
 
 - **Private card hands are never in WebSocket broadcasts.** Only HTTP responses include `my_hand`. After `level_started`, clients must re-fetch via `GET /api/lobbies/{code}`.
