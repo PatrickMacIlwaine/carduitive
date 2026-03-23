@@ -142,6 +142,45 @@ class LobbyConnectionManager:
         })
         await self.broadcast_to_lobby(message, lobby_code)
 
+    async def timer_tick(self):
+        """Broadcast remaining time every second for lobbies with timed games."""
+        from app.lobby_manager import lobby_manager
+
+        while True:
+            await asyncio.sleep(1)
+            lobby_codes = list(self.lobby_connections.keys())
+            for lobby_code in lobby_codes:
+                if lobby_code not in self.lobby_connections:
+                    continue
+
+                lobby = lobby_manager.get_lobby(lobby_code)
+                if not lobby or not lobby.game or lobby.status != "playing":
+                    continue
+
+                game = lobby.game
+                remaining = game.get_remaining_time()
+                if remaining is None:
+                    continue
+
+                if remaining <= 0 and game.status.value == "playing":
+                    # Time expired — trigger timeout
+                    result = game.handle_action("system", "timeout", {})
+                    if result and result.get("status") == "failed":
+                        lobby.updated_at = __import__("datetime").datetime.now()
+                        await self.broadcast_to_lobby(
+                            json.dumps({"type": "game_update", "data": result}),
+                            lobby_code
+                        )
+                else:
+                    # Broadcast remaining time
+                    await self.broadcast_to_lobby(
+                        json.dumps({
+                            "type": "timer_tick",
+                            "data": {"remaining": round(remaining, 1)}
+                        }),
+                        lobby_code
+                    )
+
     async def heartbeat(self, interval: int = 10):
         """Periodically broadcast connection status to all active lobbies.
 

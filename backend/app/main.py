@@ -23,8 +23,10 @@ async def lifespan(app: FastAPI):
         for migration in MIGRATIONS:
             await conn.execute(text(migration))
     heartbeat_task = asyncio.create_task(lobby_manager_ws.heartbeat(interval=10))
+    timer_task = asyncio.create_task(lobby_manager_ws.timer_tick())
     yield
     heartbeat_task.cancel()
+    timer_task.cancel()
 
 
 app = FastAPI(

@@ -1,5 +1,5 @@
 """
-Test game config settings: failure modes and card sorting.
+Test game config settings: failure modes, card sorting, and timer.
 """
 
 import sys
@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
+from datetime import datetime, timedelta
 from app.games.classic import ClassicCarduitive
 from app.games.base import GameStatus
 from dataclasses import dataclass
@@ -204,3 +205,88 @@ class TestCardsSorted:
             if found_unsorted:
                 break
         assert found_unsorted, "Expected at least one unsorted hand over 20 trials"
+
+
+class TestTimer:
+    def test_no_timer_by_default(self):
+        game = _make_game("forgiving")
+        assert game.get_remaining_time() is None
+        assert not game.is_timed_out()
+
+    def test_timer_returns_remaining(self):
+        players = [MockPlayer("p1", "Alice"), MockPlayer("p2", "Bob")]
+        game = ClassicCarduitive("TEST", players)
+        game.start_game({"timer_seconds": 15})
+        remaining = game.get_remaining_time()
+        assert remaining is not None
+        assert 14 < remaining <= 15
+
+    def test_timer_expired(self):
+        players = [MockPlayer("p1", "Alice"), MockPlayer("p2", "Bob")]
+        game = ClassicCarduitive("TEST", players)
+        game.start_game({"timer_seconds": 15})
+        # Simulate time passing
+        game.game_start_time = datetime.now() - timedelta(seconds=20)
+        assert game.is_timed_out()
+        assert game.get_remaining_time() == 0.0
+
+    def test_timeout_action_fails_level(self):
+        players = [MockPlayer("p1", "Alice"), MockPlayer("p2", "Bob")]
+        game = ClassicCarduitive("TEST", players)
+        game.start_game({"timer_seconds": 15})
+        result = game.handle_action("system", "timeout", {})
+        assert result["status"] == "failed"
+        assert game.status == GameStatus.FAILED
+
+    def test_timeout_progression_message(self):
+        players = [MockPlayer("p1", "Alice"), MockPlayer("p2", "Bob")]
+        game = ClassicCarduitive("TEST", players)
+        game.start_game({"timer_seconds": 15, "failure_mode": "hardcore"})
+        # Advance to level 2 first
+        _play_through_level(game)
+        game.handle_action("p1", "advance", {})
+        assert game.level == 2
+        # Timeout
+        game.handle_action("system", "timeout", {})
+        state = game.get_public_state()
+        assert state["progression"]["is_timeout"] is True
+        assert "Time's up" in state["progression"]["message"]
+        assert state["progression"]["restart_level"] == 1  # hardcore
+
+    def test_play_after_timeout_returns_timeout(self):
+        players = [MockPlayer("p1", "Alice"), MockPlayer("p2", "Bob")]
+        game = ClassicCarduitive("TEST", players)
+        game.start_game({"timer_seconds": 15})
+        # Simulate expired timer
+        game.game_start_time = datetime.now() - timedelta(seconds=20)
+        # Try to play a card — should trigger timeout instead
+        card = game.player_hands["p1"].cards[0]
+        result = game.handle_action("p1", "play", {"card": card})
+        assert result["status"] == "failed"
+        assert game.status == GameStatus.FAILED
+
+    def test_timer_resets_on_new_level(self):
+        players = [MockPlayer("p1", "Alice"), MockPlayer("p2", "Bob")]
+        game = ClassicCarduitive("TEST", players)
+        game.start_game({"timer_seconds": 15})
+        # Simulate time passing
+        game.game_start_time = datetime.now() - timedelta(seconds=10)
+        remaining_before = game.get_remaining_time()
+        assert remaining_before is not None and remaining_before < 6
+        # Complete level and advance
+        _play_through_level(game)
+        game.handle_action("p1", "advance", {})
+        # Timer should be reset
+        remaining_after = game.get_remaining_time()
+        assert remaining_after is not None and remaining_after > 14
+
+    def test_timeout_not_allowed_when_not_playing(self):
+        players = [MockPlayer("p1", "Alice"), MockPlayer("p2", "Bob")]
+        game = ClassicCarduitive("TEST", players)
+        game.start_game({"timer_seconds": 15})
+        # Fail the level first
+        _fail_level(game)
+        assert game.status == GameStatus.FAILED
+        # Timeout should error since already failed
+        result = game.handle_action("system", "timeout", {})
+        assert "error" in result
