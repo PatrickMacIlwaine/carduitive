@@ -36,23 +36,24 @@ interface GameBoardProps {
   onPlayCard: (card: number) => void
   onAdvance: () => void
   onRestart: () => void
+  timerRemaining?: number | null
 }
 
-export function GameBoard({ 
-  gameState, 
-  currentPlayerId, 
+export function GameBoard({
+  gameState,
+  currentPlayerId,
   players,
   onPlayCard,
   onAdvance,
-  onRestart
+  onRestart,
+  timerRemaining
 }: GameBoardProps) {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
 
-  const { 
-    level, 
-    played_cards, 
-    next_expected, 
-    player_hands, 
+  const {
+    level,
+    played_cards,
+    player_hands,
     my_hand,
     status,
     progression
@@ -75,12 +76,20 @@ export function GameBoard({
     <div className="w-full h-full flex flex-col relative">
       {/* Top: Level Info */}
       <div className="flex-shrink-0 py-4 px-4">
-        <div className="flex justify-center">
+        <div className="flex justify-center items-center gap-3">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
             <span className="font-bold text-lg">Level {level}</span>
-            <span className="text-sm opacity-70">•</span>
-            <span className="text-sm">Next: {next_expected}</span>
           </div>
+          {timerRemaining != null && status === 'playing' && (
+            <div className={cn(
+              "inline-flex items-center px-3 py-2 rounded-lg font-mono font-bold text-lg tabular-nums border",
+              timerRemaining <= 5
+                ? "bg-red-500/10 border-red-500/30 text-red-500 animate-pulse"
+                : "bg-muted/50 border-muted text-foreground"
+            )}>
+              {Math.ceil(timerRemaining)}s
+            </div>
+          )}
         </div>
       </div>
 

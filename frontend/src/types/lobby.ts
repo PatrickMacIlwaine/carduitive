@@ -22,6 +22,7 @@ export interface CurrentPlayer {
 export interface GameConfig {
   failure_mode?: 'forgiving' | 'hardcore'
   cards_sorted?: boolean
+  timer_seconds?: number | null
 }
 
 export interface Lobby {
@@ -47,7 +48,7 @@ export interface ChatMessage {
 }
 
 export interface WebSocketMessage {
-  type: 'player_joined' | 'player_left' | 'lobby_update' | 'chat' | 'connected' | 'connection_update' | 'countdown' | 'game_started' | 'game_update' | 'level_started' | 'config_update' | 'error'
+  type: 'player_joined' | 'player_left' | 'lobby_update' | 'chat' | 'connected' | 'connection_update' | 'countdown' | 'game_started' | 'game_update' | 'level_started' | 'config_update' | 'timer_tick' | 'error'
   data?: Lobby | ChatMessage | { messages: ChatMessage[]; connected_players?: string[]; count?: number; game_state?: any; game_type?: string; level?: number; status?: string; action?: string }
   player_name?: string
   message?: string

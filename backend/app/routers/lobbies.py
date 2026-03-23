@@ -27,7 +27,7 @@ async def _maybe_save_score(lobby: Lobby, db: AsyncSession) -> Optional[Dict[str
         return None
 
     config = lobby.game.config
-    if config.get("failure_mode") != "hardcore":
+    if config.get("failure_mode") != "hardcore" or config.get("timer_seconds") != 15:
         return None
 
     if len(lobby.players) < 2:
@@ -47,6 +47,7 @@ async def _maybe_save_score(lobby: Lobby, db: AsyncSession) -> Optional[Dict[str
     saved_config = {
         "failure_mode": config.get("failure_mode", "forgiving"),
         "cards_sorted": config.get("cards_sorted", True),
+        "timer_seconds": config.get("timer_seconds"),
     }
 
     result = await db.execute(
@@ -134,6 +135,7 @@ class UpdateConfigRequest(BaseModel):
 VALID_CONFIG_VALUES: Dict[str, list] = {
     "failure_mode": ["forgiving", "hardcore"],
     "cards_sorted": [True, False],
+    "timer_seconds": [None, 15, 30, 60],
 }
 
 

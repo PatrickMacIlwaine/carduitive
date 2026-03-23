@@ -37,6 +37,7 @@ interface GameResultsProps {
       restart_level?: number
       play_history?: PlayHistoryEntry[]
       failure?: FailureInfo
+      is_timeout?: boolean
     }
     leaderboard?: {
       saved: boolean
@@ -111,6 +112,7 @@ export function GameResults({
 }: GameResultsProps) {
   const { status, level, player_hands, my_hand, progression, leaderboard } = gameState
   const isWin = status === 'success'
+  const isTimeout = progression?.is_timeout ?? false
   const failure = progression?.failure
   const playHistory = progression?.play_history ?? []
   const restartLevel = progression?.restart_level ?? level
@@ -146,15 +148,28 @@ export function GameResults({
               "text-4xl mb-2",
               isWin ? "text-green-500" : "text-red-500"
             )}>
-              {isWin ? '🎉 Level Complete!' : '💥 Level Failed'}
+              {isWin ? '🎉 Level Complete!' : isTimeout ? '⏰ Time\'s Up!' : '💥 Level Failed'}
             </CardTitle>
             <p className="text-muted-foreground">Level {level}</p>
           </motion.div>
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {/* Timeout message */}
+          {!isWin && isTimeout && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 p-4"
+            >
+              <p className="font-medium text-orange-700 dark:text-orange-400">
+                Ran out of time on Level {level}
+              </p>
+            </motion.div>
+          )}
+
           {/* What went wrong (failed only) */}
-          {!isWin && failure && (
+          {!isWin && !isTimeout && failure && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

@@ -14,6 +14,7 @@ interface UseLobbyReturn {
   createLobby: (playerName: string) => Promise<boolean>
   leaveLobby: () => void
   sendChatMessage: (message: string) => void
+  timerRemaining: number | null
   startGame: (gameType: string, config: Record<string, unknown>) => Promise<boolean>
   sendGameAction: (action: string, data?: Record<string, unknown>) => Promise<boolean>
   updateConfig: (config: Record<string, unknown>) => Promise<boolean>
@@ -27,6 +28,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [countdown, setCountdown] = useState<number | null>(null)
   const [isStarting, setIsStarting] = useState(false)
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null)
   
   const wsRef = useRef<WebSocket | null>(null)
   const playerRef = useRef<{ id: string; name: string } | null>(null)
@@ -178,6 +180,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
             // New level started (advance or restart)
             console.log('Level started:', message.data)
             setCountdown(null)
+            setTimerRemaining(null)
             setIsStarting(false)
 
             if (message.data && 'level' in message.data) {
@@ -212,6 +215,13 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
                 if (!prev) return prev
                 return { ...prev, game_config: configData.game_config }
               })
+            }
+            break
+
+          case 'timer_tick':
+            if (message.data && 'remaining' in message.data) {
+              const tickData = message.data as unknown as { remaining: number }
+              setTimerRemaining(tickData.remaining)
             }
             break
 
@@ -603,6 +613,7 @@ export function useLobby(lobbyCode: string): UseLobbyReturn {
     leaveLobby,
     sendChatMessage,
     startGame,
+    timerRemaining,
     sendGameAction,
     updateConfig,
   }

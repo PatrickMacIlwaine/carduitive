@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Trophy, Medal, Award, Loader2, Skull, Shuffle } from 'lucide-react'
+import { Trophy, Medal, Award, Loader2, Skull, Shuffle, Zap } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { API_URL } from '@/contexts/AuthContext'
@@ -7,6 +7,7 @@ import { API_URL } from '@/contexts/AuthContext'
 interface GameConfig {
   failure_mode?: string
   cards_sorted?: boolean
+  timer_seconds?: number | null
 }
 
 interface LeaderboardEntry {
@@ -74,6 +75,12 @@ function LeaderboardRow({ entry, rank, isTopThree }: { entry: LeaderboardEntry; 
                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
                   <Shuffle className="w-3 h-3" />
                   Shuffled
+                </span>
+              )}
+              {entry.game_config.timer_seconds != null && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
+                  <Zap className="w-3 h-3" />
+                  {entry.game_config.timer_seconds}s
                 </span>
               )}
             </div>

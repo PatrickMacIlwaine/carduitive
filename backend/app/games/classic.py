@@ -34,6 +34,7 @@ class ClassicCarduitive(Game):
         "timing_mode": "relaxed",  # relaxed, timed, speedrun
         "failure_mode": "forgiving",  # forgiving (restart current level), hardcore (restart at level 1)
         "cards_sorted": True,  # True = hand sorted ascending, False = random order
+        "timer_seconds": None,  # None = no timer, int = seconds per level
         "allow_undo": False,
         "strict_order": True,
     }
@@ -66,6 +67,18 @@ class ClassicCarduitive(Game):
             self.disconnected_players.discard(player_id)
             self.log_action("reconnect", player_id, {"timestamp": datetime.now().isoformat()})
     
+    def get_remaining_time(self) -> Optional[float]:
+        """Returns seconds remaining, or None if no timer configured."""
+        timer_seconds = self.config.get("timer_seconds")
+        if not timer_seconds or not self.game_start_time:
+            return None
+        elapsed = (datetime.now() - self.game_start_time).total_seconds()
+        return max(0.0, timer_seconds - elapsed)
+
+    def is_timed_out(self) -> bool:
+        remaining = self.get_remaining_time()
+        return remaining is not None and remaining <= 0
+
     def get_game_type(self) -> str:
         return "classic"
     
@@ -148,6 +161,8 @@ class ClassicCarduitive(Game):
             return self._handle_advance()
         elif action == "restart":
             return self._handle_restart()
+        elif action == "timeout":
+            return self._handle_timeout()
         
         # Regular gameplay actions
         if self.status not in [GameStatus.PLAYING, GameStatus.WAITING]:
@@ -185,8 +200,21 @@ class ClassicCarduitive(Game):
 
         return self.start_game(self.config)
     
+    def _handle_timeout(self) -> Dict[str, Any]:
+        """Handle level timeout — treat as failure"""
+        if self.status != GameStatus.PLAYING:
+            return {"error": "Game not in progress"}
+
+        self.status = GameStatus.FAILED
+        self.log_action("timeout", "system", {"level": self.level})
+        return self.get_public_state()
+
     def _handle_play(self, player_id: str, card: Optional[int]) -> Dict[str, Any]:
         """Handle a player playing a card"""
+        # Check timer before processing
+        if self.is_timed_out():
+            return self._handle_timeout()
+
         # Validate card
         if card is None:
             return {"error": "No card specified"}
@@ -330,19 +358,28 @@ class ClassicCarduitive(Game):
             }
         elif self.status == GameStatus.FAILED:
 
-            # Find the failure action
-            fail_action = next(
-                (a for a in reversed(self.actions) if a.type == "fail"),
+            # Check if this was a timeout or a wrong card
+            timeout_action = next(
+                (a for a in reversed(self.actions) if a.type == "timeout"),
                 None,
             )
+            is_timeout = timeout_action is not None and (
+                not any(a.type == "fail" and a.timestamp > timeout_action.timestamp for a in self.actions)
+            )
+
             failure = None
-            if fail_action:
-                failure = {
-                    "player_id": fail_action.player_id,
-                    "player_name": player_name_map.get(fail_action.player_id, "Unknown"),
-                    "card_played": fail_action.data["card"],
-                    "card_expected": fail_action.data["expected"],
-                }
+            if not is_timeout:
+                fail_action = next(
+                    (a for a in reversed(self.actions) if a.type == "fail"),
+                    None,
+                )
+                if fail_action:
+                    failure = {
+                        "player_id": fail_action.player_id,
+                        "player_name": player_name_map.get(fail_action.player_id, "Unknown"),
+                        "card_played": fail_action.data["card"],
+                        "card_expected": fail_action.data["expected"],
+                    }
 
             # Reveal all players' remaining cards on failure
             state["player_hands"] = {
@@ -355,7 +392,11 @@ class ClassicCarduitive(Game):
             }
 
             restart_level = 1 if self.config.get("failure_mode") == "hardcore" else self.level
-            if restart_level == self.level:
+            if is_timeout:
+                restart_msg = f"⏰ Time's up! Level {self.level} failed."
+                if restart_level != self.level:
+                    restart_msg = "⏰ Time's up! Back to Level 1!"
+            elif restart_level == self.level:
                 restart_msg = f"💥 Wrong card! Try Level {self.level} again?"
             else:
                 restart_msg = "💥 Wrong card! Back to Level 1!"
@@ -366,6 +407,7 @@ class ClassicCarduitive(Game):
                 "restart_level": restart_level,
                 "play_history": play_history,
                 "failure": failure,
+                "is_timeout": is_timeout,
             }
 
         return state

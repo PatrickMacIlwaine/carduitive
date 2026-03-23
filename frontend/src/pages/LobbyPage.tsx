@@ -71,6 +71,17 @@ function LobbyHeader({
   )
 }
 
+function getPresetName(config: GameConfig): string {
+  const fm = config.failure_mode ?? 'forgiving'
+  const sorted = config.cards_sorted ?? true
+  const timer = config.timer_seconds ?? null
+
+  if (fm === 'hardcore' && sorted && timer === 15) return 'Speed Hardcore'
+  if (fm === 'hardcore' && sorted && timer === null) return 'Hardcore'
+  if (fm === 'forgiving' && sorted && timer === null) return 'Classic'
+  return 'Custom'
+}
+
 function HostControls({
   isHost,
   playerCount,
@@ -78,7 +89,7 @@ function HostControls({
   isStarting,
   onStartGame,
   onOpenSettings,
-  failureMode,
+  gameConfig,
   allAuthenticated,
 }: {
   isHost: boolean
@@ -87,10 +98,12 @@ function HostControls({
   isStarting: boolean
   onStartGame: () => void
   onOpenSettings: () => void
-  failureMode: string
+  gameConfig: GameConfig
   allAuthenticated: boolean
 }) {
-  const leaderboardEligible = failureMode === 'hardcore' && playerCount >= 2 && allAuthenticated
+  const presetName = getPresetName(gameConfig)
+  const isSpeedHardcore = presetName === 'Speed Hardcore'
+  const leaderboardEligible = isSpeedHardcore && playerCount >= 2 && allAuthenticated
   if (!isHost) {
     return (
       <Card>
@@ -126,7 +139,7 @@ function HostControls({
         <Button variant="outline" className="w-full" onClick={onOpenSettings}>
           <Settings className="w-4 h-4 mr-2" />
           Game Settings
-          <span className="ml-auto text-xs text-muted-foreground capitalize">{failureMode}</span>
+          <span className="ml-auto text-xs text-muted-foreground">{presetName}</span>
         </Button>
         {leaderboardEligible && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800">
@@ -134,7 +147,7 @@ function HostControls({
             <p className="text-xs text-yellow-700 dark:text-yellow-400">Leaderboard eligible</p>
           </div>
         )}
-        {failureMode === 'hardcore' && playerCount >= 2 && !allAuthenticated && (
+        {isSpeedHardcore && playerCount >= 2 && !allAuthenticated && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-muted">
             <Trophy className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <p className="text-xs text-muted-foreground">All players must sign in with Google for leaderboard</p>
@@ -186,6 +199,7 @@ export function LobbyPage() {
     sendChatMessage,
     startGame: startLobbyGame,
     sendGameAction,
+    timerRemaining,
     updateConfig,
   } = useLobby(code)
 
@@ -260,6 +274,7 @@ export function LobbyPage() {
             onPlayCard={playCard}
             onAdvance={advanceLevel}
             onRestart={restartLevel}
+            timerRemaining={timerRemaining}
           />
           
           <LobbyChat
@@ -299,7 +314,7 @@ export function LobbyPage() {
                 isStarting={isStarting}
                 onStartGame={startGame}
                 onOpenSettings={() => setShowSettings(true)}
-                failureMode={lobby.game_config?.failure_mode ?? 'forgiving'}
+                gameConfig={lobby.game_config ?? {}}
                 allAuthenticated={lobby.players.every(p => p.is_authenticated)}
               />
             </div>
