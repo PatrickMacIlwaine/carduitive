@@ -21,6 +21,15 @@ class LeaderboardEntry(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class GameStats(Base):
+    __tablename__ = "game_stats"
+
+    id = Column(Integer, primary_key=True, default=1)
+    total_games = Column(Integer, nullable=False, default=0)  # Lobby sessions started
+    total_rounds = Column(Integer, nullable=False, default=0)  # Level attempts
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class User(Base):
     __tablename__ = "users"
 
