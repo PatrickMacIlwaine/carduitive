@@ -75,14 +75,14 @@ export function GameBoard({
   return (
     <div className="w-full h-full flex flex-col relative">
       {/* Top: Level Info */}
-      <div className="flex-shrink-0 py-4 px-4">
+      <div className="flex-shrink-0 py-2 md:py-4 px-4">
         <div className="flex justify-center items-center gap-3">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
-            <span className="font-bold text-lg">Level {level}</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/10 text-primary">
+            <span className="font-bold text-base md:text-lg">Level {level}</span>
           </div>
           {timerRemaining != null && status === 'playing' && (
             <div className={cn(
-              "inline-flex items-center px-3 py-2 rounded-lg font-mono font-bold text-lg tabular-nums border",
+              "inline-flex items-center px-2.5 py-1.5 md:px-3 md:py-2 rounded-lg font-mono font-bold text-base md:text-lg tabular-nums border",
               timerRemaining <= 5
                 ? "bg-red-500/10 border-red-500/30 text-red-500 animate-pulse"
                 : "bg-muted/50 border-muted text-foreground"
@@ -94,7 +94,7 @@ export function GameBoard({
       </div>
 
       {/* Opponent Cards - Fanned */}
-      <div className="flex-shrink-0 py-4 px-4">
+      <div className="flex-shrink-0 py-2 md:py-4 px-4">
         <div className="flex justify-center items-end gap-8" style={{ perspective: '1000px' }}>
           {otherPlayers.map((player, index) => {
             const handInfo = player_hands[player.id] || { card_count: 0 }
@@ -133,12 +133,12 @@ export function GameBoard({
                 </div>
                 
                 {/* Fanned Card Backs */}
-                <div className="relative" style={{ height: '6rem', width: '4rem' }}>
+                <div className="relative" style={{ height: '4.5rem', width: '3rem' }}>
                   {Array.from({ length: Math.min(cardCount, 5) }).map((_, i) => (
                     <div
                       key={i}
                       className={cn(
-                        "absolute w-14 h-20 md:w-16 md:h-24 rounded-lg border-2 shadow-md",
+                        "absolute w-10 h-14 md:w-16 md:h-24 rounded-lg border-2 shadow-md",
                         isConnected 
                           ? "bg-slate-700 border-slate-600" 
                           : "bg-slate-500 border-slate-400"
@@ -149,7 +149,7 @@ export function GameBoard({
                       }}
                     >
                       {i === Math.min(cardCount, 5) - 1 && (
-                        <HelpCircle className="w-8 h-8 md:w-10 md:h-10 text-slate-400 absolute inset-0 m-auto" />
+                        <HelpCircle className="w-5 h-5 md:w-10 md:h-10 text-slate-400 absolute inset-0 m-auto" />
                       )}
                     </div>
                   ))}
@@ -183,45 +183,45 @@ export function GameBoard({
       </div>
 
       {/* Center: Game Status and Last Played */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-2">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-1 min-h-0">
         {/* Status Message */}
-        <p className="text-sm text-muted-foreground text-center mb-6">
+        <p className="text-sm text-muted-foreground text-center mb-2 md:mb-6">
           {status === 'success' && progression?.message}
           {status === 'failed' && progression?.message}
         </p>
 
         {/* Last Played Card */}
-        <div className="mb-6">
-          <p className="text-sm text-muted-foreground text-center mb-3">Last Played</p>
+        <div className="mb-2 md:mb-6">
+          <p className="text-xs md:text-sm text-muted-foreground text-center mb-1.5 md:mb-3">Last Played</p>
           {lastPlayedCard ? (
             <motion.div
               key={lastPlayedCard}
               initial={{ scale: 0.8, rotate: -10 }}
               animate={{ scale: 1, rotate: 0 }}
-              className="w-28 h-40 md:w-36 md:h-52 rounded-xl bg-white border-2 border-slate-200 shadow-2xl flex items-center justify-center relative overflow-hidden"
+              className="w-20 h-28 md:w-36 md:h-52 rounded-xl bg-white border-2 border-slate-200 shadow-2xl flex items-center justify-center relative overflow-hidden"
             >
               <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-400 to-transparent" />
-              <span className="text-6xl md:text-7xl font-bold text-slate-800">
+              <span className="text-4xl md:text-7xl font-bold text-slate-800">
                 {lastPlayedCard}
               </span>
-              <span className="absolute top-3 left-3 text-lg font-bold text-slate-400">
+              <span className="absolute top-2 left-2 md:top-3 md:left-3 text-sm md:text-lg font-bold text-slate-400">
                 {lastPlayedCard}
               </span>
-              <span className="absolute bottom-3 right-3 text-lg font-bold text-slate-400 rotate-180">
+              <span className="absolute bottom-2 right-2 md:bottom-3 md:right-3 text-sm md:text-lg font-bold text-slate-400 rotate-180">
                 {lastPlayedCard}
               </span>
             </motion.div>
           ) : (
-            <div className="w-28 h-40 md:w-36 md:h-52 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50/50">
-              <span className="text-slate-400 text-sm">Waiting...</span>
+            <div className="w-20 h-28 md:w-36 md:h-52 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50/50">
+              <span className="text-slate-400 text-xs md:text-sm">Waiting...</span>
             </div>
           )}
         </div>
       </div>
 
       {/* Bottom: Your Hand (Larger and Fanned) */}
-      <div className="flex-shrink-0 py-6 px-4 bg-gradient-to-t from-background to-transparent">
-        <h3 className="text-center text-lg font-semibold mb-4">
+      <div className="flex-shrink-0 py-3 md:py-6 px-4 bg-gradient-to-t from-background to-transparent">
+        <h3 className="text-center text-sm md:text-lg font-semibold mb-2 md:mb-4">
           Your Hand
         </h3>
         
@@ -269,7 +269,7 @@ export function GameBoard({
                   <span className="text-4xl md:text-5xl font-bold text-slate-800">
                     {card}
                   </span>
-                  
+
                   <span className="absolute top-2 left-3 text-sm font-bold text-slate-400">
                     {card}
                   </span>
@@ -300,7 +300,7 @@ export function GameBoard({
           </div>
         )}
         
-        <p className="text-center text-sm text-muted-foreground mt-4">
+        <p className="text-center text-xs md:text-sm text-muted-foreground mt-2 md:mt-4">
           {myCards.length} card{myCards.length !== 1 ? 's' : ''} in hand • {played_cards.length} played
         </p>
       </div>
