@@ -6,12 +6,13 @@ import json
 import asyncio
 
 from sqlalchemy import text
-from app.database import engine, Base
+from app.database import engine, Base, async_session
 from app.config import get_settings
 from init_db import MIGRATIONS
 from app.routers import counter, leaderboard, lobbies, auth
 from app.websocket import lobby_manager_ws
 from app.lobby_manager import lobby_manager
+from app.routers.lobbies import stats_accumulator
 
 settings = get_settings()
 
@@ -22,11 +23,28 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
         for migration in MIGRATIONS:
             await conn.execute(text(migration))
+    async def flush_stats_loop():
+        while True:
+            await asyncio.sleep(900)  # 15 minutes
+            try:
+                async with async_session() as db:
+                    await stats_accumulator.flush(db)
+            except Exception:
+                pass
+
     heartbeat_task = asyncio.create_task(lobby_manager_ws.heartbeat(interval=10))
     timer_task = asyncio.create_task(lobby_manager_ws.timer_tick())
+    stats_flush_task = asyncio.create_task(flush_stats_loop())
     yield
+    # Flush remaining stats before shutdown
+    try:
+        async with async_session() as db:
+            await stats_accumulator.flush(db)
+    except Exception:
+        pass
     heartbeat_task.cancel()
     timer_task.cancel()
+    stats_flush_task.cancel()
 
 
 app = FastAPI(

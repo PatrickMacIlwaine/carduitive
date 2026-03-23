@@ -22,7 +22,8 @@ interface LeaderboardEntry {
 interface LeaderboardStats {
   total_teams: number
   high_score: number
-  games_today: number
+  total_games: number
+  total_rounds: number
 }
 
 function RankIcon({ rank }: { rank: number }) {
@@ -98,7 +99,7 @@ function LeaderboardRow({ entry, rank, isTopThree }: { entry: LeaderboardEntry; 
 
 export function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
-  const [stats, setStats] = useState<LeaderboardStats>({ total_teams: 0, high_score: 0, games_today: 0 })
+  const [stats, setStats] = useState<LeaderboardStats>({ total_teams: 0, high_score: 0, total_games: 0, total_rounds: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -195,23 +196,29 @@ export function LeaderboardPage() {
       </Card>
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6 text-center">
             <p className="text-3xl font-bold text-primary">{stats.total_teams.toLocaleString()}</p>
-            <p className="text-sm text-muted-foreground">Active Teams</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <p className="text-3xl font-bold text-primary">{stats.games_today.toLocaleString()}</p>
-            <p className="text-sm text-muted-foreground">Games Today</p>
+            <p className="text-sm text-muted-foreground">Teams</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6 text-center">
             <p className="text-3xl font-bold text-primary">{stats.high_score.toLocaleString()}</p>
             <p className="text-sm text-muted-foreground">High Score</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <p className="text-3xl font-bold text-primary">{stats.total_games.toLocaleString()}</p>
+            <p className="text-sm text-muted-foreground">Games Played</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <p className="text-3xl font-bold text-primary">{stats.total_rounds.toLocaleString()}</p>
+            <p className="text-sm text-muted-foreground">Rounds Played</p>
           </CardContent>
         </Card>
       </div>

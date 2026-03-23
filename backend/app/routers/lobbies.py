@@ -13,12 +13,42 @@ from app.lobby_manager import lobby_manager, Lobby
 from app.websocket import lobby_manager_ws
 from app.config import get_settings
 from app.database import get_db
-from app.models import LeaderboardEntry
+from app.models import LeaderboardEntry, GameStats
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 router = APIRouter(prefix="/api/lobbies", tags=["lobbies"])
+
+
+class _StatsAccumulator:
+    """In-memory counter that flushes to DB periodically."""
+
+    def __init__(self):
+        self.games = 0
+        self.rounds = 0
+
+    def increment(self, games: int = 0, rounds: int = 0):
+        self.games += games
+        self.rounds += rounds
+
+    async def flush(self, db: AsyncSession):
+        if self.games == 0 and self.rounds == 0:
+            return
+        games, rounds = self.games, self.rounds
+        self.games, self.rounds = 0, 0
+        result = await db.execute(select(GameStats).where(GameStats.id == 1))
+        stats = result.scalar_one_or_none()
+        if stats:
+            stats.total_games += games
+            stats.total_rounds += rounds
+        else:
+            stats = GameStats(id=1, total_games=games, total_rounds=rounds)
+            db.add(stats)
+        await db.commit()
+
+
+stats_accumulator = _StatsAccumulator()
 
 
 async def _maybe_save_score(lobby: Lobby, db: AsyncSession) -> Optional[Dict[str, Any]]:
@@ -543,7 +573,8 @@ async def update_config(
 async def start_game(
     code: str,
     request: StartGameRequest,
-    http_request: Request
+    http_request: Request,
+    db: AsyncSession = Depends(get_db)
 ):
     """Start a game in the lobby (host only) with 3-2-1 countdown."""
     # Get session cookie dynamically
@@ -604,7 +635,10 @@ async def start_game(
     # Update lobby level tracking
     lobby.current_level = 1
     lobby.game_type = request.game_type
-    
+
+    # Track stats: 1 game started, 1 round (first level)
+    stats_accumulator.increment(games=1, rounds=1)
+
     # Add system message
     lobby.add_message("System", "system", "Game started! Level 1", "system")
     
@@ -698,6 +732,9 @@ async def game_action(
 
     # Determine message type based on action
     if request.action in ["advance", "restart"]:
+        # Track round (new level attempt)
+        stats_accumulator.increment(rounds=1)
+
         # For level transitions, tell all clients to fetch new state
         message_type = "level_started"
         broadcast_data = {

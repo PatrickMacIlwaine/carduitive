@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import List, Optional
 
 from app.database import get_db
-from app.models import LeaderboardEntry
+from app.models import LeaderboardEntry, GameStats
+from app.routers.lobbies import stats_accumulator
 
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
 
@@ -98,13 +99,17 @@ async def get_leaderboard_stats(db: AsyncSession = Depends(get_db)):
     top_entry = result.scalar_one_or_none()
     high_score = top_entry.score if top_entry else 0
     
-    # Mock games today (will be replaced with real data later)
-    games_today = 0
-    
+    # Global game stats (DB + pending in-memory values)
+    result = await db.execute(select(GameStats).where(GameStats.id == 1))
+    db_stats = result.scalar_one_or_none()
+    total_games = (db_stats.total_games if db_stats else 0) + stats_accumulator.games
+    total_rounds = (db_stats.total_rounds if db_stats else 0) + stats_accumulator.rounds
+
     return {
         "total_teams": total_teams,
         "high_score": high_score,
-        "games_today": games_today
+        "total_games": total_games,
+        "total_rounds": total_rounds,
     }
 
 
